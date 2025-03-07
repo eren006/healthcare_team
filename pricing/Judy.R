@@ -8,7 +8,7 @@ library(dplyr)
 library(tidyr)
 
 # load in the data file into data.frame
-data <- read_excel("/Users/judyfu/Desktop/Shared Github/8416/pricing/data.xlsx", sheet = "MH-Modified Data")
+data <- read_excel("/Users/judyfu/Desktop/A2/healthcare_team/pricing/data.xlsx", sheet = "MH-Modified Data")
 
 # Inspect the data (additional)
 str(data)
