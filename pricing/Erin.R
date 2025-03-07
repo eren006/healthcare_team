@@ -5,6 +5,7 @@ install.packages("corrplot")
 install.packages("vcd")
 install.packages("car")
 install.packages("e1071")
+install.packages("writexl") 
 
 library(tidyverse)
 library(corrplot)
@@ -14,6 +15,7 @@ library(readxl)
 library(car)
 library(e1071)
 library(ggplot2)
+library(writexl)
 
 
 data <- read_excel("../healthcare_team/pricing/data.xlsx", sheet ='MH-Modified Data')
@@ -177,3 +179,4 @@ ggplot(data_long, aes(x = Value)) +
   theme_minimal() +
   labs(title = "Histogram & Density Plots for Selected Variables")
 
+write_xlsx(data_cleaned, "data_cleaned.xlsx")
