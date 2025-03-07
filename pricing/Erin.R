@@ -2,12 +2,18 @@
 install.packages("tidyverse")
 install.packages("janitor")
 install.packages("corrplot")
+install.packages("vcd")
+install.packages("car")
+install.packages("e1071")
 
 library(tidyverse)
 library(corrplot)
 library(janitor)
-
+library(vcd)
 library(readxl)
+library(car)
+library(e1071)
+library(ggplot2)
 
 
 data <- read_excel("../healthcare_team/pricing/data.xlsx", sheet ='MH-Modified Data')
@@ -52,7 +58,7 @@ ggplot(data_long, aes(x = Variable, y = Value, color = Outlier)) +
 # Select only the relevant columns for outlier detection
 selected_cols <- c("age", "body_weight", "body_height", "hr_pulse", "rr", "hb",
                    "total_cost_to_hospital", "total_length_of_stay", 
-                   "length_of_stay__icu", "length_of_stay__ward")
+                   "length_of_stay_icu", "length_of_stay_ward")
 
 
 identify_outliers <- function(x) {
@@ -92,3 +98,82 @@ ggplot(data_long_cleaned, aes(x = Variable, y = Value)) +
   theme_minimal() +
   labs(title = "Boxplots After Removing Outliers") +
   facet_wrap(~Variable, scales = "free")  # Separate plots for each variable
+
+#heat-map
+
+# Separate the numeric columns from the categorical ones
+numeric_data <- data %>%
+  select(all_of(selected_cols))
+
+# Identify categorical columns (all columns except numeric ones)
+categorical_data <- data %>%
+  select(-all_of(selected_cols))
+
+# Calculate the correlation matrix for numeric variables
+cor_matrix <- cor(numeric_data, use = "pairwise.complete.obs", method = "spearman")
+
+# Visualize the correlation matrix with a heatmap
+library(corrplot)
+corrplot(cor_matrix, 
+         method = "color", 
+         type = "upper", 
+         order = "hclust", 
+         addCoef.col = "black", 
+         tl.col = "black", 
+         tl.srt = 45, 
+         diag = FALSE)
+
+# Fit a linear model using the numeric columns
+lm_model <- lm(age ~ body_weight + body_height + hr_pulse + rr + hb + 
+                 total_cost_to_hospital + total_length_of_stay + 
+                 length_of_stay_icu + length_of_stay_ward, data = numeric_data)
+
+# Check the VIF for each variable
+vif(lm_model)
+
+#if based on vif, remove total_length_of_stay,length_of_stay_icu, length_of_stay_ward
+
+
+# Function to compute Cramér's V
+calculate_cramers_v <- function(x, y) {
+  tbl <- table(x, y)
+  chisq_test <- chisq.test(tbl)
+  cramer_v <- sqrt(chisq_test$statistic / (sum(tbl) * (min(dim(tbl)) - 1)))
+  return(cramer_v)
+}
+
+# Compute Cramér's V for all categorical pairs
+categorical_cols <- names(categorical_data)
+cramers_v_matrix <- outer(categorical_cols, categorical_cols, 
+                          Vectorize(function(x, y) calculate_cramers_v(categorical_data[[x]], categorical_data[[y]])))
+
+# Convert to data frame for visualization
+cramers_v_df <- as.data.frame(cramers_v_matrix)
+rownames(cramers_v_df) <- categorical_cols
+colnames(cramers_v_df) <- categorical_cols
+
+# Print the matrix
+print(cramers_v_df)
+
+#skewness
+
+# Compute skewness only for selected numeric columns
+skewness_results <- sapply(data[selected_cols], skewness, na.rm = TRUE)
+
+# Print results
+print(skewness_results)
+
+
+# Convert data to long format for ggplot
+data_long <- data %>%
+  select(all_of(selected_cols)) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value")
+
+# Plot histograms with density overlay
+ggplot(data_long, aes(x = Value)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "blue", alpha = 0.5) +
+  geom_density(color = "red", size = 1) +
+  facet_wrap(~Variable, scales = "free") +  # Separate plots per variable
+  theme_minimal() +
+  labs(title = "Histogram & Density Plots for Selected Variables")
+
