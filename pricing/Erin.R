@@ -30,9 +30,13 @@ selected_cols <- c("age", "body_weight", "body_height", "hr_pulse", "rr", "hb",
                    "total_cost_to_hospital", "total_length_of_stay", 
                    "length_of_stay_icu", "length_of_stay_ward")
 
+selected_cols_1 <- c("age", "body_weight", "body_height", "hr_pulse", "hb",
+                   "total_cost_to_hospital", "total_length_of_stay", 
+                   "length_of_stay_icu", "length_of_stay_ward")
+
 # Convert selected numeric columns to long format
 data_long <- data %>%
-  select(all_of(selected_cols)) %>%
+  select(all_of(selected_cols_1)) %>%
   pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value")
 
 # Compute IQR and determine outliers
@@ -57,10 +61,6 @@ ggplot(data_long, aes(x = Variable, y = Value, color = Outlier)) +
   facet_wrap(~Variable, scales = "free")  # Separate plots for each variable
 
 
-# Select only the relevant columns for outlier detection
-selected_cols <- c("age", "body_weight", "body_height", "hr_pulse", "rr", "hb",
-                   "total_cost_to_hospital", "total_length_of_stay", 
-                   "length_of_stay_icu", "length_of_stay_ward")
 
 
 identify_outliers <- function(x) {
@@ -74,7 +74,7 @@ identify_outliers <- function(x) {
 
 # Apply the outlier detection to each column and create a logical matrix of outliers
 outlier_flags <- data %>%
-  select(all_of(selected_cols)) %>%
+  select(all_of(selected_cols_1)) %>%
   map_dfr(~identify_outliers(.x)) %>%
   as.data.frame()
 
@@ -101,6 +101,8 @@ ggplot(data_long_cleaned, aes(x = Variable, y = Value)) +
   labs(title = "Boxplots After Removing Outliers") +
   facet_wrap(~Variable, scales = "free")  # Separate plots for each variable
 
+data_cleaned <- subset(data_cleaned, select=-c(implant_used_y_n))
+
 #heat-map
 
 # Separate the numeric columns from the categorical ones
@@ -115,7 +117,6 @@ categorical_data <- data %>%
 cor_matrix <- cor(numeric_data, use = "pairwise.complete.obs", method = "spearman")
 
 # Visualize the correlation matrix with a heatmap
-library(corrplot)
 corrplot(cor_matrix, 
          method = "color", 
          type = "upper", 
