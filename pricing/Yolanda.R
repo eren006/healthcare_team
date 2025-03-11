@@ -9,13 +9,7 @@ library(writexl)
 library(janitor)
 
 # Load dataset
-df <- read_excel("pricing/data.xlsx", sheet = 4)
-print(colnames(df))
-
-# Clean column names
-df <- df %>% clean_names()
-
-# Print actual column names after cleaning
+df <- read_excel("pricing/data_cleaned.xlsx", sheet = 1)
 print(colnames(df))
 
 #create dummy variable
@@ -36,6 +30,16 @@ df <- df %>%
   select(-type_of_admsn) 
 df <- df %>%
   select(-implant_used_y_n)
+
+print(str(df))
+
+#delete variable with only one feature
+df_scaled <- df_scaled %>%
+  select(-cad_svd)
+df_scaled <- df_scaled %>%
+  select(-alert)
+
+
 
 # -------------------------------------------------
 # Question f: MLR & feature selections
