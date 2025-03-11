@@ -53,3 +53,21 @@ df <- df %>%
 df <- df %>%
   mutate(is_implant = ifelse(trimws(implant_used_y_n) == "Y", 1, 0)) %>%
   select(-implant_used_y_n)
+
+
+#delete column with only 1 variable
+#delete "alert" 
+df <- df %>% select(-alert)  
+#delete "alert"
+df <- df %>% select(-cad_svd) 
+
+
+#question f
+y <- df$total_cost_to_hospital
+X <- df %>% select(-total_cost_to_hospital, -sl) 
+X <- as.data.frame(scale(X))  
+df_scaled <- cbind(y, X)    
+
+#full model
+full_model <- lm(y ~ ., data = df_scaled)
+summary(full_model)
