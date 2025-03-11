@@ -6,6 +6,7 @@ library(caret)
 library(stats)
 library(tidyr)
 library(writexl)
+library(janitor) 
 
 # Load dataset
 df <- read_excel("pricing/data.xlsx", sheet = 4)
@@ -84,10 +85,17 @@ lm_train_full <- lm(y ~ ., data = train_data)
 cat("\nFull Model Summary (Training Data):\n")
 print(summary(lm_train_full))
 
+# Identify significant variables (p-value < 0.1), excluding intercept
+significant_vars <- names(which(summary(lm_train_full)$coefficients[,4] < 0.1))
+significant_vars <- setdiff(significant_vars, "(Intercept)")  # Remove intercept
+
 # Prepare reduced training data (include y + significant variables)
 train_reduced_data <- train_data %>% select(y, all_of(significant_vars))
-print(colnames(train_reduced_data))
 
+aliased_vars <- c("cad_svd", "none_19", "none_31", "alert", "elective")
+train_reduced_data <- train_reduced_data %>% select(-all_of(intersect(aliased_vars, colnames(train_reduced_data))))
+
+print(colnames(train_reduced_data))
 
 # Train Reduced Model
 lm_train_reduced <- lm(y ~ ., data = train_reduced_data)
