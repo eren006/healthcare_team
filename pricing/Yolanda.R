@@ -41,4 +41,13 @@ df_scaled <- cbind(y, X)
 full_model <- lm(y ~ ., data = df_scaled)
 summary(full_model)
 
+#refined regression model
+significant_vars <- c("total_cost_to_hospital","cad_dvd", "other_tertalogy", "body_height", "diabetes2", "cost_of_implant")
+
+df_significant <- df %>% select(all_of(significant_vars))
+
+model_refined <- lm(total_cost_to_hospital ~ cad_dvd + other_tertalogy + body_height + diabetes2 + cost_of_implant, data = df_significant)
+
+summary(model_refined)
+
 
