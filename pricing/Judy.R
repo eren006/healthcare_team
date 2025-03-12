@@ -220,6 +220,7 @@ significant_vars <- names(which(summary(lm_train_full)$coefficients[,4] < 0.1))
 significant_vars <- setdiff(significant_vars, "(Intercept)")  # Remove intercept
 
 significant_vars_filtered <- setdiff(significant_vars, aliased_vars)
+significant_vars_filtered
 
 train_reduced_data <- train_data %>% select(y, all_of(significant_vars_filtered))
 print(colnames(train_reduced_data))
@@ -262,4 +263,37 @@ if(abs(rmse_full - rmse_reduced) < 0.1*rmse_full) {
       round(rmse_reduced - rmse_full, 2), ") might be acceptable depending",
       "on operational requirements for model simplicity.")
 }
+
+# Additional Model Evaluation Metrics
+
+# Mean Absolute Error (MAE)
+mae_full <- mean(abs(predictions_full - test_data$y))
+mae_reduced <- mean(abs(predictions_reduced - test_data$y))
+# Print additional performance metrics
+cat("\nModel Performance Metrics:\n")
+cat("Full Model: RMSE =", round(rmse_full, 2), "| MAE =", round(mae_full, 2))
+cat("Reduced Model: RMSE =", round(rmse_reduced, 2), "| MAE =", round(mae_reduced, 2))
+
+# Residual Analysis (Distribution of Errors)
+# Compute residuals
+residuals_full <- test_data$y - predictions_full
+residuals_reduced <- test_data$y - predictions_reduced
+# Plot histogram of residuals
+par(mfrow = c(1, 2))  # Create side-by-side plots
+
+hist(residuals_full, breaks = 30, col = "blue", main = "Residuals: Full Model", xlab = "Residuals")
+hist(residuals_reduced, breaks = 30, col = "red", main = "Residuals: Reduced Model", xlab = "Residuals")
+
+# Predicted vs. Actual Scatter Plot
+par(mfrow = c(1, 2))  # Create side-by-side plots
+# Full Model Plot
+plot(test_data$y, predictions_full, col = "blue", pch = 16, main = "Full Model: Predicted vs Actual",
+     xlab = "Actual Cost", ylab = "Predicted Cost")
+abline(0, 1, col = "black", lwd = 2)  # Ideal fit line
+# Reduced Model Plot
+plot(test_data$y, predictions_reduced, col = "red", pch = 16, main = "Reduced Model: Predicted vs Actual",
+     xlab = "Actual Cost", ylab = "Predicted Cost")
+abline(0, 1, col = "black", lwd = 2)  # Ideal fit line
+# Reset plot layout
+par(mfrow = c(1, 1))
 
