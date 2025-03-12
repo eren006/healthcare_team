@@ -297,3 +297,105 @@ abline(0, 1, col = "black", lwd = 2)  # Ideal fit line
 # Reset plot layout
 par(mfrow = c(1, 1))
 
+# Question g: IF WE REMOVE 2 UNKNOWN VARIABLES - total length of stay and cost of impant
+
+# Set seed for reproducibility
+set.seed(2005)
+
+# Split into 70% training and 30% test set
+trainIndex <- createDataPartition(df$y, p = 0.7, list = FALSE)
+train_data <- df[trainIndex, ]
+test_data <- df[-trainIndex, ]
+
+# Remove "total_length_of_stay" and "cost_of_implant" from both models
+train_data <- train_data %>% select(-total_length_of_stay, -cost_of_implant)
+test_data <- test_data %>% select(-total_length_of_stay, -cost_of_implant)
+
+# Train Full Model (without removed variables)
+lm_train_full <- lm(y ~ ., data = train_data)
+cat("\nFull Model Summary (Training Data):\n")
+print(summary(lm_train_full))
+
+# Identify significant variables (p-value < 0.1), excluding intercept
+significant_vars <- names(which(summary(lm_train_full)$coefficients[,4] < 0.1))
+significant_vars <- setdiff(significant_vars, "(Intercept)")  # Remove intercept
+significant_vars
+
+# Ensure aliased variables and removed variables are not included
+significant_vars_filtered <- setdiff(significant_vars, c(aliased_vars, "total_length_of_stay", "cost_of_implant"))
+significant_vars_filtered 
+
+train_reduced_data <- train_data %>% select(y, all_of(significant_vars_filtered))
+print(colnames(train_reduced_data))
+
+# Train Reduced Model
+lm_train_reduced <- lm(y ~ ., data = train_reduced_data)
+cat("\nReduced Model Summary (Training Data):\n")
+print(summary(lm_train_reduced))
+
+# Predict on Test Data
+predictions_full <- predict(lm_train_full, newdata = test_data)
+predictions_reduced <- predict(lm_train_reduced, newdata = test_data %>% select(all_of(significant_vars_filtered)))
+
+# Compute RMSE for both models
+rmse_full <- sqrt(mean((predictions_full - test_data$y)^2))
+rmse_reduced <- sqrt(mean((predictions_reduced - test_data$y)^2))
+
+# Performance Interpretation
+cat("\nTraining Data Performance:\n")
+cat("Full Model R-squared:", summary(lm_train_full)$r.squared, 
+    "Adj R-squared:", summary(lm_train_full)$adj.r.squared, "\n")
+cat("Reduced Model R-squared:", summary(lm_train_reduced)$r.squared,
+    "Adj R-squared:", summary(lm_train_reduced)$adj.r.squared, "\n\n")
+
+# Test Performance
+cat("Test Data Performance:\n")
+print(paste("Full Model RMSE: ", round(rmse_full, 2)))
+print(paste("Reduced Model RMSE: ", round(rmse_reduced, 2)))
+
+# Performance Evaluation
+cat("\nPerformance Evaluation:\n")
+if(abs(rmse_full - rmse_reduced) < 0.1*rmse_full) {
+  cat("Both models show comparable performance. The reduced model maintains",
+      "similar predictive accuracy with fewer variables, which is acceptable.")
+} else if(rmse_reduced < rmse_full) {
+  cat("The reduced model demonstrates BETTER performance with fewer variables,",
+      "which is highly acceptable.")
+} else {
+  cat("The reduced model shows WORSE performance. The difference in RMSE (", 
+      round(rmse_reduced - rmse_full, 2), ") might be acceptable depending",
+      "on operational requirements for model simplicity.")
+}
+
+# Additional Model Evaluation Metrics
+
+# Mean Absolute Error (MAE)
+mae_full <- mean(abs(predictions_full - test_data$y))
+mae_reduced <- mean(abs(predictions_reduced - test_data$y))
+# Print additional performance metrics
+cat("\nModel Performance Metrics:\n")
+cat("Full Model: RMSE =", round(rmse_full, 2), "| MAE =", round(mae_full, 2), "\n")
+cat("Reduced Model: RMSE =", round(rmse_reduced, 2), "| MAE =", round(mae_reduced, 2), "\n")
+
+# Residual Analysis (Distribution of Errors)
+# Compute residuals
+residuals_full <- test_data$y - predictions_full
+residuals_reduced <- test_data$y - predictions_reduced
+# Plot histogram of residuals
+par(mfrow = c(1, 2))  # Create side-by-side plots
+
+hist(residuals_full, breaks = 30, col = "blue", main = "Residuals: Full Model", xlab = "Residuals")
+hist(residuals_reduced, breaks = 30, col = "red", main = "Residuals: Reduced Model", xlab = "Residuals")
+
+# Predicted vs. Actual Scatter Plot
+par(mfrow = c(1, 2))  # Create side-by-side plots
+# Full Model Plot
+plot(test_data$y, predictions_full, col = "blue", pch = 16, main = "Full Model: Predicted vs Actual",
+     xlab = "Actual Cost", ylab = "Predicted Cost")
+abline(0, 1, col = "black", lwd = 2)  # Ideal fit line
+# Reduced Model Plot
+plot(test_data$y, predictions_reduced, col = "red", pch = 16, main = "Reduced Model: Predicted vs Actual",
+     xlab = "Actual Cost", ylab = "Predicted Cost")
+abline(0, 1, col = "black", lwd = 2)  # Ideal fit line
+# Reset plot layout
+par(mfrow = c(1, 1))
