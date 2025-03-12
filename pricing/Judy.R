@@ -35,27 +35,25 @@ df <- df %>%
 print(str(df))
 
 #delete variable with only one feature
-df <- df %>%
-  select(-cad_svd)
-df <- df %>%
-  select(-alert)
-df <- df %>%
-  select(-sl)
+df <- df %>% select(-cad_svd)
+df <- df %>% select(-alert)
+df <- df %>% select(-sl)
 
 view(df)
 
 # --- EDA ---------------------------------------------
 numeric <- c("age", "body_weight", "body_height", "hr_pulse", "rr", "hb",
              "total_cost_to_hospital", "total_length_of_stay", 
-             "length_of_stay_icu", "length_of_stay_ward")
+             "length_of_stay_icu", "length_of_stay_ward", "cost_of_implant")
 
 # Separate the numeric columns from the categorical ones
-numeric_data <- df %>%
-  select(all_of(numeric))
+numeric_data <- df %>% select(all_of(numeric))
+numeric_data
 
 # Identify categorical columns (all columns except numeric ones)
-categorical_data <- df %>%
-  select(-all_of(numeric))
+categorical_data <- df %>% select(-all_of(numeric))
+categorical_data
+
 
 # ------ For Numerical Variables:
 # Corr Matrix -----
@@ -106,7 +104,6 @@ if(nrow(vif_results) > 0) {
   cat("No variables with VIF >5 detected")
 }
 
-
 # ------ For Categorical Variables:
 # Function to compute Cramér's V ----- 
 calculate_cramers_v <- function(x, y) {
@@ -118,6 +115,8 @@ calculate_cramers_v <- function(x, y) {
 
 # Compute Cramér's V for all categorical pairs
 categorical_cols <- names(categorical_data)
+categorical_cols
+
 cramers_v_matrix <- outer(categorical_cols, categorical_cols, 
                           Vectorize(function(x, y) calculate_cramers_v(categorical_data[[x]], categorical_data[[y]])))
 
@@ -154,41 +153,46 @@ if(nrow(strong_associations) > 0) {
   cat("No categorical variable pairs with Cramér's V ≥", threshold)
 }
 
+print(colnames(df))
+
+#--- Preprocessing: remove highly-collineared variables from results above
+# Remove specified columns
+df <- df %>%
+  select(-body_weight, 
+         -length_of_stay_ward,
+         -age,
+         -length_of_stay_icu,
+         -implant)
+
+# Verify removal
+print(colnames(df))
+
+
 # -------------------------------------------------
 # Question f: MLR & feature selections
 
-## Full Model
+aliased_vars <- c("elective", "none_19", "none_31")
+df <- df %>% select(-all_of(aliased_vars))
 
 y <- df$total_cost_to_hospital
 
-X <- df %>% select(-total_cost_to_hospital, -sl)
-
-dummy_vars <- X %>% select(where(~ n_distinct(.) == 2)) 
-numeric_vars <- X %>% select(-all_of(names(dummy_vars)))  
-
-numeric_vars_scaled <- scale(numeric_vars) %>% as.data.frame()
-
-df_scaled <- cbind(y, numeric_vars_scaled, dummy_vars)
-
-str(df_scaled)
+X <- df %>% select(-total_cost_to_hospital)
+df <- cbind(y, X)
 
 #full model
-full_model <- lm(y ~ ., data = df_scaled)
+full_model <- lm(y ~ ., data = df)
 summary(full_model)
 
-
 # Reduced Model: Remove Non-Significant Variables
-
 # Define variables that must to remove
-aliased_vars <- c("cad_svd", "none_19", "none_31", "alert", "elective")
-df_reduced <- df_scaled %>% select(-all_of(aliased_vars))
 
 # Identify significant variables (p-value < 0.1), excluding intercept
 significant_vars <- names(which(summary(full_model)$coefficients[,4] < 0.1))
 significant_vars <- setdiff(significant_vars, "(Intercept)")  # Remove intercept
+significant_vars
 
 # Ensure 'y' is included in the dataset
-df_reduced <- df_reduced %>% select(y, all_of(significant_vars))
+df_reduced <- df %>% select(y, all_of(significant_vars))
 print(colnames(df_reduced))
 
 # Fit reduced model
@@ -202,17 +206,14 @@ summary(reduced_model)
 set.seed(2005)
 
 # Split into 70% training and 30% test set
-trainIndex <- createDataPartition(df_scaled$y, p = 0.7, list = FALSE)
-train_data <- df_scaled[trainIndex, ]
-test_data <- df_scaled[-trainIndex, ]
+trainIndex <- createDataPartition(df$y, p = 0.7, list = FALSE)
+train_data <- df[trainIndex, ]
+test_data <- df[-trainIndex, ]
 
 # Train Full Model
 lm_train_full <- lm(y ~ ., data = train_data)
 cat("\nFull Model Summary (Training Data):\n")
 print(summary(lm_train_full))
-
-# Define variables that must to remove
-aliased_vars <- c("cad_svd", "none_19", "none_31", "alert", "elective")
 
 # Identify significant variables (p-value < 0.1), excluding intercept
 significant_vars <- names(which(summary(lm_train_full)$coefficients[,4] < 0.1))
