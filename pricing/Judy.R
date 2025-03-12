@@ -1,3 +1,4 @@
+
 # Load necessary libraries
 library(readxl)
 library(dplyr)
@@ -6,16 +7,10 @@ library(caret)
 library(stats)
 library(tidyr)
 library(writexl)
-library(janitor) 
+library(janitor)
 
 # Load dataset
-df <- read_excel("pricing/data.xlsx", sheet = 4)
-print(colnames(df))
-
-# Clean column names
-df <- df %>% clean_names()
-
-# Print actual column names after cleaning
+df <- read_excel("pricing/data_cleaned.xlsx", sheet = 1)
 print(colnames(df))
 
 #create dummy variable
@@ -37,14 +32,145 @@ df <- df %>%
 df <- df %>%
   select(-implant_used_y_n)
 
+print(str(df))
+
+#delete variable with only one feature
+df <- df %>%
+  select(-cad_svd)
+df <- df %>%
+  select(-alert)
+df <- df %>%
+  select(-sl)
+
+view(df)
+
+# --- EDA ---------------------------------------------
+numeric <- c("age", "body_weight", "body_height", "hr_pulse", "rr", "hb",
+             "total_cost_to_hospital", "total_length_of_stay", 
+             "length_of_stay_icu", "length_of_stay_ward")
+
+# Separate the numeric columns from the categorical ones
+numeric_data <- df %>%
+  select(all_of(numeric))
+
+# Identify categorical columns (all columns except numeric ones)
+categorical_data <- df %>%
+  select(-all_of(numeric))
+
+# ------ For Numerical Variables:
+# Corr Matrix -----
+# Calculate the correlation matrix for numeric variables
+cor_matrix <- cor(numeric_data, use = "pairwise.complete.obs", method = "spearman")
+
+# Visualize the correlation matrix with a heatmap
+corrplot(cor_matrix, 
+         method = "color", 
+         type = "upper", 
+         order = "hclust", 
+         addCoef.col = "black", 
+         tl.col = "black", 
+         tl.srt = 45, 
+         diag = FALSE)
+
+# Extract high correlation pairs (Spearman > 0.7)
+high_cor_pairs <- which(cor_matrix > 0.7 & upper.tri(cor_matrix), arr.ind = TRUE)
+
+high_cor <- data.frame(
+  Variable1 = rownames(cor_matrix)[high_cor_pairs[, 1]],
+  Variable2 = colnames(cor_matrix)[high_cor_pairs[, 2]],
+  Correlation = cor_matrix[high_cor_pairs]
+) %>% 
+  arrange(desc(Correlation))
+
+# Show results
+print(high_cor)
+
+# VIF test -----
+lm_model <- lm(total_cost_to_hospital ~ age+ body_weight + body_height + hr_pulse + rr + hb +
+                 total_length_of_stay + 
+                 length_of_stay_icu + length_of_stay_ward, data = numeric_data)
+
+# Calculate VIF and format results
+vif_results <- vif(lm_model) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Variable") %>%
+  rename(VIF = ".") %>%
+  filter(VIF > 5) %>%
+  arrange(desc(VIF))
+
+# Display results
+if(nrow(vif_results) > 0) {
+  cat("Variables with VIF >5:\n")
+  print(vif_results)
+} else {
+  cat("No variables with VIF >5 detected")
+}
+
+
+# ------ For Categorical Variables:
+# Function to compute Cramér's V ----- 
+calculate_cramers_v <- function(x, y) {
+  tbl <- table(x, y)
+  chisq_test <- chisq.test(tbl)
+  cramer_v <- sqrt(chisq_test$statistic / (sum(tbl) * (min(dim(tbl)) - 1)))
+  return(cramer_v)
+}
+
+# Compute Cramér's V for all categorical pairs
+categorical_cols <- names(categorical_data)
+cramers_v_matrix <- outer(categorical_cols, categorical_cols, 
+                          Vectorize(function(x, y) calculate_cramers_v(categorical_data[[x]], categorical_data[[y]])))
+
+# Convert to data frame for visualization
+cramers_v_df <- as.data.frame(cramers_v_matrix)
+rownames(cramers_v_df) <- categorical_cols
+colnames(cramers_v_df) <- categorical_cols
+
+# Print the matrix
+print(cramers_v_df)
+
+# Set correlation threshold (adjust as needed)
+threshold <- 0.7
+
+# Get upper triangle indices of pairs meeting threshold
+strong_pairs <- which(cramers_v_matrix >= threshold & 
+                        upper.tri(cramers_v_matrix), 
+                      arr.ind = TRUE)
+
+# Create formatted results table
+strong_associations <- data.frame(
+  Variable1 = categorical_cols[strong_pairs[, 1]],
+  Variable2 = categorical_cols[strong_pairs[, 2]],
+  Cramers_V = cramers_v_matrix[strong_pairs]
+) %>% 
+  arrange(desc(Cramers_V)) %>%
+  distinct()  # Remove duplicates if any
+
+# Display results
+if(nrow(strong_associations) > 0) {
+  cat("Categorical variable pairs with Cramér's V ≥", threshold, "\n")
+  print(strong_associations)
+} else {
+  cat("No categorical variable pairs with Cramér's V ≥", threshold)
+}
+
 # -------------------------------------------------
 # Question f: MLR & feature selections
 
 ## Full Model
+
 y <- df$total_cost_to_hospital
-X <- df %>% select(-total_cost_to_hospital, -sl) 
-X <- as.data.frame(scale(X))  
-df_scaled <- cbind(y, X)    
+
+X <- df %>% select(-total_cost_to_hospital, -sl)
+
+dummy_vars <- X %>% select(where(~ n_distinct(.) == 2)) 
+numeric_vars <- X %>% select(-all_of(names(dummy_vars)))  
+
+numeric_vars_scaled <- scale(numeric_vars) %>% as.data.frame()
+
+df_scaled <- cbind(y, numeric_vars_scaled, dummy_vars)
+
+str(df_scaled)
 
 #full model
 full_model <- lm(y ~ ., data = df_scaled)
@@ -85,16 +211,16 @@ lm_train_full <- lm(y ~ ., data = train_data)
 cat("\nFull Model Summary (Training Data):\n")
 print(summary(lm_train_full))
 
+# Define variables that must to remove
+aliased_vars <- c("cad_svd", "none_19", "none_31", "alert", "elective")
+
 # Identify significant variables (p-value < 0.1), excluding intercept
 significant_vars <- names(which(summary(lm_train_full)$coefficients[,4] < 0.1))
 significant_vars <- setdiff(significant_vars, "(Intercept)")  # Remove intercept
 
-# Prepare reduced training data (include y + significant variables)
-train_reduced_data <- train_data %>% select(y, all_of(significant_vars))
+significant_vars_filtered <- setdiff(significant_vars, aliased_vars)
 
-aliased_vars <- c("cad_svd", "none_19", "none_31", "alert", "elective")
-train_reduced_data <- train_reduced_data %>% select(-all_of(intersect(aliased_vars, colnames(train_reduced_data))))
-
+train_reduced_data <- train_data %>% select(y, all_of(significant_vars_filtered))
 print(colnames(train_reduced_data))
 
 # Train Reduced Model
@@ -135,21 +261,4 @@ if(abs(rmse_full - rmse_reduced) < 0.1*rmse_full) {
       round(rmse_reduced - rmse_full, 2), ") might be acceptable depending",
       "on operational requirements for model simplicity.")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
