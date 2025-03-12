@@ -1,0 +1,152 @@
+---
+title: "erin_code"
+author: "erin"
+date: "11/03/2025"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+import pandas as pd
+import statsmodels.api as sm
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+
+data_cleaned <- read_excel("../data_cleaned.xlsx")
+# List of aliased variables to remove
+aliased_vars <- c("cad_svd", "none_19", "none_31", "alert", "elective")
+
+# Remove the aliased variables from the dataset
+numeric_data_cleaned <- numeric_data[, !(names(numeric_data) %in% aliased_vars)]
+
+data_q1 <- data_cleaned[, !(names(data_cleaned) %in% c("cad_svd", "none_19", "none_31", "alert", "elective"))]
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+#q1
+# Example: Convert "gender" to a dummy variable
+#data_q1$gender_M <- ifelse(data_q1$gender == "M", 1, 0)
+
+#data_q1 <- data_q1 %>%
+#  mutate(across(c(gender, marital_status, key_complaints_code, mode_of_arrival, 
+#                  state_at_the_time_of_arrival, type_of_admsn, 
+#                  past_medical_history_code, implant_used_y_n), as.factor))
+
+
+# Fit a linear model
+model <- lm(total_cost_to_hospital ~ body_weight, data = data_q1)
+
+# Display model summary
+summary(model)
+```
+
+
+```{r pressure, echo=FALSE}
+# Check residuals vs fitted values for heteroscedasticity
+plot(model, which = 1)
+
+# Check normality of residuals using a Q-Q plot
+plot(model, which = 2)
+
+# Check scale-location plot (variance should be constant)
+plot(model, which = 3)
+
+# Check influential points (Cook's distance)
+plot(model, which = 4)
+
+```
+
+
+```{r pressure, echo=FALSE}
+# Transform total_cost_to_hospital using log
+data_q1$log_total_cost <- log(data_q1$total_cost_to_hospital)
+
+# Fit the new model
+model_log <- lm(log_total_cost ~ body_weight, data = data_q1)
+
+# Check summary
+summary(model_log)
+
+# Recheck residuals
+par(mfrow = c(2, 2))  # Multiple plots in one window
+plot(model_log)
+```
+
+
+```{r pressure, echo=FALSE}
+# Extract slope (coefficient for body_weight)
+beta_weight <- coef(model_log)["body_weight"]
+beta_weight
+
+# Compute cost ratio for 1 kg increase
+cost_ratio <- exp(beta_weight)
+
+# Compute cost difference for a patient at 50 kg
+avg_cost_50kg <- mean(data_q1$total_cost_to_hospital[data_q1$body_weight == 50], na.rm = TRUE)
+cost_diff <- avg_cost_50kg * (cost_ratio - 1)
+
+# Print estimated cost difference
+cost_diff
+
+# Compute the critical log-difference threshold
+threshold <- log(1 + 1000 / avg_cost_50kg)
+
+# Get standard error and t-value for beta_weight
+beta_se <- summary(model_log)$coefficients["body_weight", "Std. Error"]
+t_value <- (beta_weight - threshold) / beta_se
+
+# Compute p-value for one-tailed test
+p_value <- pt(t_value, df = nrow(data_q1) - 2, lower.tail = FALSE)
+
+# Print results
+p_value
+
+#Since p-value = 0.1216 > 0.05, we fail to reject H0,Thus, we cannot confidently infer that a 51 kg patient is likely to spend at least INR 1,000 more than a 50 kg patient.
+```
+
+
+```{r pressure, echo=FALSE}
+# Given values from the log-linear model
+intercept <- 11.690596
+slope <- 0.006409
+residual_se <- 0.3594
+
+# Compute expected log(cost) for 50 kg
+weight_50 <- 50
+expected_log_cost_50 <- intercept + slope * weight_50
+
+# Convert to actual cost
+expected_cost_50 <- exp(expected_log_cost_50)
+
+# Given package price
+package_price <- 300000
+log_package_price <- log(package_price)
+
+# Compute Z-score
+z_score <- (log_package_price - expected_log_cost_50) / residual_se
+
+# Compute probability
+prob_exceed <- 1 - pnorm(z_score)
+
+# Print results
+cat("Expected Cost for 50 kg patient:", expected_cost_50, "\n")
+cat("Z-score:", z_score, "\n")
+cat("Probability of exceeding INR 300,000:", prob_exceed, "\n")
+
+#The probability of exceeding INR 300,000 is only 4.74%, meaning the chance of treatment costs exceeding the package price is relatively low. Therefore, the package price of INR 300,000 may be set too high relative to the expected costs for a 50 kg patient.
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

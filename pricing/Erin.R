@@ -181,3 +181,24 @@ ggplot(data_long, aes(x = Value)) +
   labs(title = "Histogram & Density Plots for Selected Variables")
 
 write_xlsx(data_cleaned, "data_cleaned.xlsx")
+
+# List of aliased variables to remove
+aliased_vars <- c("cad_svd", "none_19", "none_31", "alert", "elective")
+
+# Remove the aliased variables from the dataset
+numeric_data_cleaned <- numeric_data[, !(names(numeric_data) %in% aliased_vars)]
+
+data_q1 <- data_cleaned[, !(names(data_cleaned) %in% c("cad_svd", "none_19", "none_31", "alert", "elective"))]
+
+#q1
+
+
+
+
+
+
+
+
+
+
+
