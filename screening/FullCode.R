@@ -239,3 +239,7 @@ class_plot <- ggplot(training_data, aes(x = ckd, fill = ckd)) +
   theme_minimal()
 
 print(class_plot)
+
+# ----------------------------------------
+# Drop variables & columns here
+# ----------------------------------------
