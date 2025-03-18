@@ -115,9 +115,9 @@ removed <- result$removed_records
 cat("Removed records:", nrow(removed), "\n")
 cat("Binary columns detected:", result$binary_columns, "\n")
 
-# -------------------------------
+# --------------------------------------
 # Handle Outliers (Continuous Variables)
-# -------------------------------
+# --------------------------------------
 
 continuous_vars <- c("hdl", "ldl", "sbp", "dbp", "weight", "bmi", "height", "waist", "age", "total_chol")
 # Function to cap outliers using 1.5*IQR rule
@@ -175,11 +175,11 @@ highly_correlated <- corr_long %>%
 print("Highly correlated variable pairs (|r| >= 0.8):")
 print(highly_correlated)
 
-corrplot(corr_matrix, method = "color", addCoef.col = "black", number.cex = 0.7)
+corrplot(corr_matrix, method = "color", addCoef.col = "black", number.cex = 0.4)
 
-# -------------------------------
+# --------------------------------------
 # Check Class Balance (ckd) & Skewness
-# -------------------------------
+# --------------------------------------
 # Convert ckd to factor for proper handling
 data$ckd <- as.factor(data$ckd)
 
@@ -204,6 +204,7 @@ class_plot <- ggplot(data, aes(x = ckd, fill = ckd)) +
   theme_minimal()
 
 print(class_plot)
+
 
 
 
