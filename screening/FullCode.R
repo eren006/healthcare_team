@@ -58,8 +58,8 @@ write.csv(testing_data, "screening/test.csv", row.names = FALSE)
 # -------------------------------
 get_binary_mode <- function(v) {
   uniqv <- unique(na.omit(v))  # Ignore NA values
-  if(length(uniqv) == 0) return(NA)  # Handle all-NA case
-  uniqv[which.max(tabulate(match(v, uniqv)))]
+  if (length(uniqv) == 0) return(NA)  # Handle all-NA case
+  uniqv[which.max(tabulate(match(v, uniqv)))]  # Return the most frequent value
 }
 
 # -------------------------------
@@ -71,47 +71,89 @@ is_binary_column <- function(x) {
 }
 
 # -------------------------------
-# Handle Missing Values
+# Function to fill NA with Majority Category (for categorical columns)
 # -------------------------------
-handle_missing_values <- function(training_data) {
-  # 1. Identify binary columns (0/1 with or without NA)
-  binary_cols <- sapply(training_data, is_binary_column)
-  
-  # 2. Identify numerical columns
-  numerical_cols <- sapply(training_data, is.numeric)
-  
-  # 3. Remove rows with >70% missing in numerical columns
-  missing_threshold <- 0.7 * sum(numerical_cols)
-  removed_records <- training_data[rowSums(is.na(training_data[, numerical_cols])) > missing_threshold, ]
-  training_data <- training_data[rowSums(is.na(training_data[, numerical_cols])) <= missing_threshold, ]
-  
-  # 4. Fill binary columns with mode (0/1 only)
-  for(col in names(training_data)[binary_cols]) {
-    training_data[[col]][is.na(training_data[[col]])] <- get_binary_mode(training_data[[col]])
-  }
-  
-  # 5. Fill numerical columns with mean (NA excluded)
-  for(col in names(training_data)[numerical_cols]) {
-    training_data[[col]][is.na(training_data[[col]])] <- mean(training_data[[col]], na.rm = TRUE)
-  }
-  
-  # Verification
-  print("Missing values after processing:")
-  print(colSums(is.na(training_data)))
-  
-  return(list(cleaned_data = training_data, 
-              removed_records = removed_records,
-              binary_columns = names(training_data)[binary_cols]))
+fill_na_with_majority <- function(df, cols) {
+  df <- df %>%
+    mutate(across(all_of(cols), ~ {
+      mode_val <- names(sort(table(.), decreasing = TRUE))[1]
+      ifelse(is.na(.), mode_val, .)
+    }))
+  return(df)
 }
 
-# Apply to training_data
+# -------------------------------
+# Function to fill NA with the Mode (for binary columns)
+# -------------------------------
+fill_na_with_mode <- function(df, cols) {
+  for (col in cols) {
+    mode_val <- get_binary_mode(df[[col]])
+    df[[col]][is.na(df[[col]])] <- mode_val
+  }
+  return(df)
+}
+
+# -------------------------------
+# Handle Missing Values
+# -------------------------------
+
+# 1. Identify binary columns (0/1 with or without NA)
+binary_cols <- c("female", "educ", "unmarried", "income", "insured", "obese", "dyslipidemia", "pvd", 
+                 "poor_vision", "smoker", "hypertension", "diabetes", "fam_hypertension", "fam_diabetes", 
+                 "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd")
+
+# 2. Identify numerical columns
+numerical_cols <- c("age", "weight", "height", "bmi", "waist", "sbp", "dbp", "hdl", "ldl", "total_chol")
+
+# 3. Identify categorical columns
+categorical_cols <- c("racegrp", "care_source", "activity")
+
+# 4. Remove rows with >70% missing in numerical columns
+missing_threshold <- 0.7 * length(numerical_cols)
+removed_records <- training_data[rowSums(is.na(training_data[, numerical_cols])) > missing_threshold, ]
+training_data <- training_data[rowSums(is.na(training_data[, numerical_cols])) <= missing_threshold, ]
+
+# 5. Fill binary columns with mode (0/1 only)
+training_data <- fill_na_with_mode(training_data, binary_cols)
+
+# 6. Fill numerical columns with mean (NA excluded)
+for (col in numerical_cols) {
+  training_data[[col]][is.na(training_data[[col]])] <- mean(training_data[[col]], na.rm = TRUE)
+}
+
+# 7. Fill categorical columns with majority (mode) value
+training_data <- fill_na_with_majority(training_data, categorical_cols)
+
+# Verification
+print("Missing values after processing:")
+print(colSums(is.na(training_data)))
+
+# Apply to training_data (wrapped in function)
+handle_missing_values <- function(df) {
+  binary_cols <- c("female", "educ", "unmarried", "income", "insured", "obese", "dyslipidemia", "pvd", 
+                   "poor_vision", "smoker", "hypertension", "diabetes", "fam_hypertension", "fam_diabetes", 
+                   "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd")
+  numerical_cols <- c("age", "weight", "height", "bmi", "waist", "sbp", "dbp", "hdl", "ldl", "total_chol")
+  categorical_cols <- c("racegrp", "care_source", "activity")
+  
+  df <- fill_na_with_mode(df, binary_cols)
+  for (col in numerical_cols) {
+    df[[col]][is.na(df[[col]])] <- mean(df[[col]], na.rm = TRUE)
+  }
+  df <- fill_na_with_majority(df, categorical_cols)
+  
+  return(list(cleaned_data = df, removed_records = removed_records))
+}
+
+# Apply function
 result <- handle_missing_values(training_data)
 training_data <- result$cleaned_data
 removed <- result$removed_records
 
 # Print results
 cat("Removed records:", nrow(removed), "\n")
-cat("Binary columns detected:", result$binary_columns, "\n")
+cat("Missing values detected:", colSums(is.na(training_data)), "\n")
+
 
 # --------------------------------------
 # Handle Outliers (Continuous Variables)
