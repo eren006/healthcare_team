@@ -52,11 +52,6 @@ getwd()
 write.csv(training_data, "screening/train.csv", row.names = FALSE)
 write.csv(testing_data, "screening/test.csv", row.names = FALSE)
 
-data <- training_data
-dim(data)
-
-test <- testing_data
-dim(test)
 
 # -------------------------------
 # Function to Calculate Mode (for binary columns)
@@ -78,39 +73,40 @@ is_binary_column <- function(x) {
 # -------------------------------
 # Handle Missing Values
 # -------------------------------
-handle_missing_values <- function(data) {
+handle_missing_values <- function(training_data) {
   # 1. Identify binary columns (0/1 with or without NA)
-  binary_cols <- sapply(data, is_binary_column)
+  binary_cols <- sapply(training_data, is_binary_column)
   
   # 2. Identify numerical columns
-  numerical_cols <- sapply(data, is.numeric)
+  numerical_cols <- sapply(training_data, is.numeric)
   
   # 3. Remove rows with >70% missing in numerical columns
   missing_threshold <- 0.7 * sum(numerical_cols)
-  removed_records <- data[rowSums(is.na(data[, numerical_cols])) > missing_threshold, ]
-  data <- data[rowSums(is.na(data[, numerical_cols])) <= missing_threshold, ]
+  removed_records <- training_data[rowSums(is.na(training_data[, numerical_cols])) > missing_threshold, ]
+  training_data <- training_data[rowSums(is.na(training_data[, numerical_cols])) <= missing_threshold, ]
   
   # 4. Fill binary columns with mode (0/1 only)
-  for(col in names(data)[binary_cols]) {
-    data[[col]][is.na(data[[col]])] <- get_binary_mode(data[[col]])
+  for(col in names(training_data)[binary_cols]) {
+    training_data[[col]][is.na(training_data[[col]])] <- get_binary_mode(training_data[[col]])
   }
   
   # 5. Fill numerical columns with mean (NA excluded)
-  for(col in names(data)[numerical_cols]) {
-    data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
+  for(col in names(training_data)[numerical_cols]) {
+    training_data[[col]][is.na(training_data[[col]])] <- mean(training_data[[col]], na.rm = TRUE)
   }
   
   # Verification
   print("Missing values after processing:")
-  print(colSums(is.na(data)))
+  print(colSums(is.na(training_data)))
   
-  return(list(cleaned_data = data, 
+  return(list(cleaned_data = training_data, 
               removed_records = removed_records,
-              binary_columns = names(data)[binary_cols]))
+              binary_columns = names(training_data)[binary_cols]))
 }
 
-result <- handle_missing_values(data)
-data <- result$cleaned_data
+# Apply to training_data
+result <- handle_missing_values(training_data)
+training_data <- result$cleaned_data
 removed <- result$removed_records
 
 # Print results
@@ -120,8 +116,8 @@ cat("Binary columns detected:", result$binary_columns, "\n")
 # --------------------------------------
 # Handle Outliers (Continuous Variables)
 # --------------------------------------
-
 continuous_vars <- c("hdl", "ldl", "sbp", "dbp", "weight", "bmi", "height", "waist", "age", "total_chol")
+
 # Function to cap outliers using 1.5*IQR rule
 handle_outliers <- function(x) {
   Q1 <- quantile(x, 0.25, na.rm = TRUE)
@@ -134,34 +130,34 @@ handle_outliers <- function(x) {
 }
 
 # Apply outlier capping to selected variables
-data <- data %>% 
+training_data <- training_data %>% 
   mutate(across(all_of(continuous_vars), handle_outliers))
 
 # Verify outlier handling
 print("Summary after outlier treatment:")
-print(summary(data %>% select(all_of(continuous_vars))))
+print(summary(training_data %>% select(all_of(continuous_vars))))
 
 # -------------------------------
 # Normalization (Min-Max Scaling)
 # -------------------------------
-
 # Define normalization function
 normalize <- function(x) {
   (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
 }
-# Apply to the same continuous variables used for outlier handling
-data <- data %>% 
+
+# Apply normalization
+training_data <- training_data %>% 
   mutate(across(all_of(continuous_vars), normalize))
 
 # Verify normalization
 print("Normalized variables (0-1 range):")
-print(summary(data %>% select(all_of(continuous_vars))))
+print(summary(training_data %>% select(all_of(continuous_vars))))
 
 # ----------------------------------------------------------
 # Compute Highly Correlated Variables (After Preprocessing)
 # ----------------------------------------------------------
 # Compute correlation matrix on numerical variables
-corr_matrix <- cor(data %>% select(where(is.numeric)), use = "complete.obs")
+corr_matrix <- cor(training_data %>% select(where(is.numeric)), use = "complete.obs")
 
 # Convert to long format and clean up
 corr_long <- as.data.frame(as.table(corr_matrix)) %>%
@@ -177,16 +173,17 @@ highly_correlated <- corr_long %>%
 print("Highly correlated variable pairs (|r| >= 0.8):")
 print(highly_correlated)
 
-corrplot(corr_matrix, method = "color", addCoef.col = "black", number.cex = 0.4)
+# Correlation heatmap
+corrplot(corr_matrix, method = "color", addCoef.col = "black", number.cex = 0.7)
 
 # --------------------------------------
 # Check Class Balance (ckd) & Skewness
 # --------------------------------------
 # Convert ckd to factor for proper handling
-data$ckd <- as.factor(data$ckd)
+training_data$ckd <- as.factor(training_data$ckd)
 
 # Class distribution analysis
-class_dist <- table(data$ckd)
+class_dist <- table(training_data$ckd)
 prop_dist <- prop.table(class_dist)
 
 cat("\nClass Distribution:\n")
@@ -195,7 +192,7 @@ cat("\nClass Proportions:\n")
 print(round(prop_dist, 3))
 
 # Visualize class balance
-class_plot <- ggplot(data, aes(x = ckd, fill = ckd)) +
+class_plot <- ggplot(training_data, aes(x = ckd, fill = ckd)) +
   geom_bar() +
   geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5) +
   scale_fill_manual(values = c("#1f77b4", "#ff7f0e")) +
@@ -206,9 +203,3 @@ class_plot <- ggplot(data, aes(x = ckd, fill = ckd)) +
   theme_minimal()
 
 print(class_plot)
-
-
-
-
-
-
