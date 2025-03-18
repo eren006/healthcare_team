@@ -47,8 +47,8 @@ vis_miss(data)
 
 # Save the datasets as CSV files
 getwd()
-write.csv(training_data, "/Users/judyfu/Desktop/HC/healthcare_team/screening/train.csv", row.names = FALSE)
-write.csv(testing_data, "/Users/judyfu/Desktop/HC/healthcare_team/screening/test.csv", row.names = FALSE)
+write.csv(training_data, "screening/train.csv", row.names = FALSE)
+write.csv(testing_data, "screening/test.csv", row.names = FALSE)
 
 data <- training_data
 dim(data)
