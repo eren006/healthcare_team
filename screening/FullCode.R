@@ -20,6 +20,7 @@ head(data)
 # ---------------------------------------------
 data <- dummy_cols(data, select_columns = "racegrp", remove_first_dummy = TRUE)
 data <- dummy_cols(data, select_columns = "care_source", remove_first_dummy = TRUE)
+data <- dummy_cols(data, select_columns = "activity", remove_first_dummy = TRUE)
 data <- data %>% select(-racegrp)
 data <- data %>% select(-care_source)
 data <- data %>% select(-id)
