@@ -22,11 +22,12 @@ data <- dummy_cols(data, select_columns = "racegrp", remove_first_dummy = TRUE)
 data <- dummy_cols(data, select_columns = "care_source", remove_first_dummy = TRUE)
 data <- data %>% select(-racegrp)
 data <- data %>% select(-care_source)
+data <- data %>% select(-id)
 dim(data)
 
-binary_vars <- c("female", "educ", "unmarried", "dyslipidemia", "pvd", "poor_vision", 
-                 "smoker", "hypertension", "fam_hypertension", "diabetes", "fam_diabetes", 
-                 "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd")
+binary_vars <- c("female", "educ", "unmarried", "income","insured", "obese", "dyslipidemia", "pvd", "poor_vision", 
+                 "smoker", "hypertension", "diabetes",  "fam_hypertension", "fam_diabetes", 
+                 "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd", "racegrp_hispa", "racegrp_other", "racegrp_white", "care_source_DrHMO", "care_source_noplace", "care_source_other", "care_source_NA")
 
 data[binary_vars] <- lapply(data[binary_vars], as.factor)
 
