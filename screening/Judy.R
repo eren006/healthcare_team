@@ -6,26 +6,103 @@ library(rpart) # For classification trees
 library(glmnet) # For logistic regression
 library(pROC) # For ROC analysis
 library(corrplot) # For correlation heatmap
+library(naniar)
+library(fastDummies)
 
+# -------------------------------
 # Load the dataset
+# -------------------------------
 data <- read_excel("screening/screening_goodnames.xlsx")
-
+head(data)
 # Split the dataset into training and testing sets
 # Training set: First 6,000 observations with CKD values
 # Testing set: Remaining 2,819 observations without CKD values
-training_data <- data[1:6000, ]
-testing_data <- data[6001:nrow(data), ]
+print(colSums(is.na(data)))
+training_data <- data %>% filter(!is.na(ckd))
+testing_data  <- data %>% filter(is.na(ckd))
+
+# Verify the dimensions (should be around 6000 for training and 2819 for test)
+dim(training_data)
+dim(testing_data)
+
+vis_miss(data)
 
 # Save the datasets as CSV files
-write.csv(training_data, "train.csv", row.names = FALSE)
-write.csv(testing_data, "test.csv", row.names = FALSE)
+getwd()
+write.csv(training_data, "/Users/judyfu/Desktop/HC/healthcare_team/screening/train.csv", row.names = FALSE)
+write.csv(testing_data, "/Users/judyfu/Desktop/HC/healthcare_team/screening/test.csv", row.names = FALSE)
 
-# Data Preprocessing
-# Handle missing values in the training set
-training_data <- training_data %>% 
-  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
+data <- training_data
+dim(data)
 
-# Handle outliers using the IQR method
+test <- testing_data
+dim(test)
+
+# -------------------------------
+# Change to dummy variables
+# -------------------------------
+data <- dummy_cols(data, select_columns = "racegrp", remove_first_dummy = TRUE)
+data <- dummy_cols(data, select_columns = "care_source", remove_first_dummy = TRUE)
+data <- data %>% select(-racegrp)
+data <- data %>% select(-care_source)
+dim(data)
+View(data)
+
+# -------------------------------
+# Handling missing values
+# -------------------------------
+# Function to calculate mode
+get_mode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+# Handle missing values only on the training set
+handle_missing_values <- function(data) {
+  # Identify binary and numerical columns
+  binary_cols <- sapply(data, function(x) length(unique(x)) == 2)
+  numerical_cols <- sapply(data, is.numeric)
+  
+  # Fill binary variables with mode
+  for (col in names(data)[binary_cols]) {
+    data[[col]][is.na(data[[col]])] <- get_mode(data[[col]])
+  }
+  
+  # Fill numerical variables with mean
+  for (col in names(data)[numerical_cols]) {
+    data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
+  }
+  
+  # Identify records missing more than 70% of numerical columns
+  missing_threshold <- 0.7 * sum(numerical_cols)
+  removed_records <- data[rowSums(is.na(data[, numerical_cols])) > missing_threshold, ]
+  
+  # Remove records missing more than 70% of numerical columns
+  data <- data[rowSums(is.na(data[, numerical_cols])) <= missing_threshold, ]
+  
+  # Return cleaned data and removed records
+  return(list(cleaned_data = data, removed_records = removed_records))
+}
+
+# Apply the function to handle missing values only on the training set
+result <- handle_missing_values(data)
+data <- result$cleaned_data
+removed_records <- result$removed_records
+
+# Print the removed records
+print("Records removed due to more than 70% missing numerical values:")
+print(removed_records)
+
+# Verify the dimensions after handling missing values
+dim(data)
+
+head(data)
+
+View(data)
+
+# -------------------------------
+# Handle Outliers (Using IQR Method)
+# -------------------------------
 handle_outliers <- function(x) {
   Q1 <- quantile(x, 0.25, na.rm = TRUE)
   Q3 <- quantile(x, 0.75, na.rm = TRUE)
@@ -37,98 +114,76 @@ handle_outliers <- function(x) {
   return(x)
 }
 
-training_data <- training_data %>% mutate(across(where(is.numeric), handle_outliers))
+data <- data %>% mutate(across(where(is.numeric), handle_outliers))
 
-# Normalize the data using Min-Max normalization
+dim(data)
+
+View(data)
+
+# -------------------------------
+# Normalization (Min-Max Scaling)
+# -------------------------------
 normalize <- function(x) {
-  return((x - min(x)) / (max(x) - min(x)))
+  return((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
 }
+data <- data %>% mutate(across(where(is.numeric), normalize))
+dim(data)
 
-training_data <- training_data %>% mutate(across(where(is.numeric), normalize))
+View(data)
 
-# Create a heatmap for correlation
-correlation_matrix <- cor(training_data %>% select(where(is.numeric)))
-corrplot(correlation_matrix, method = "color", type = "upper", order = "hclust", 
-         tl.col = "black", tl.srt = 45, diag = FALSE)
+# -------------------------------
+# Compute Highly Correlated Variables (Train Data Only)
+# -------------------------------
+# Compute correlation matrix on numerical variables
+corr_matrix <- cor(data %>% select(where(is.numeric)), use = "complete.obs")
 
-# Model Training
-# Define the target variable and features
-target <- "CKD"
-features <- setdiff(names(training_data), c("ID", "CKD"))
+# Convert correlation matrix to long format
+corr_long <- as.data.frame(as.table(corr_matrix))
 
-# Split the training data into training and validation sets
-set.seed(123)
-train_index <- createDataPartition(training_data[[target]], p = 0.8, list = FALSE)
-train_set <- training_data[train_index, ]
-validation_set <- training_data[-train_index, ]
+# Rename columns
+colnames(corr_long) <- c("Variable1", "Variable2", "Correlation")
 
-# Train a logistic regression model
-logistic_model <- glm(as.formula(paste(target, "~ .")), 
-                      data = train_set %>% select(all_of(c(target, features))), 
-                      family = binomial())
+# Remove self-correlations
+corr_long <- corr_long %>% filter(Variable1 != Variable2)
 
-# Train a classification tree model
-tree_model <- rpart(as.formula(paste(target, "~ .")), 
-                    data = train_set %>% select(all_of(c(target, features))), 
-                    method = "class")
+# Convert to absolute correlation values
+corr_long$AbsCorrelation <- abs(corr_long$Correlation)
 
-# Evaluate models on the validation set
-# Logistic Regression
-logistic_pred <- predict(logistic_model, validation_set, type = "response")
-logistic_roc <- roc(validation_set[[target]], logistic_pred)
-cat("Logistic Regression AUC:", auc(logistic_roc), "\n")
+# Sort by highest absolute correlation
+corr_long <- corr_long %>% arrange(desc(AbsCorrelation))
 
-# Classification Tree
-tree_pred <- predict(tree_model, validation_set, type = "prob")[, 2]
-tree_roc <- roc(validation_set[[target]], tree_pred)
-cat("Classification Tree AUC:", auc(tree_roc), "\n")
+# Filter for highly correlated variables (Threshold: 0.8)
+highly_correlated <- corr_long %>% filter(AbsCorrelation >= 0.8)
 
-# Choose the best model based on AUC
-if (auc(logistic_roc) > auc(tree_roc)) {
-  final_model <- logistic_model
-  cat("Selected Model: Logistic Regression\n")
-} else {
-  final_model <- tree_model
-  cat("Selected Model: Classification Tree\n")
-}
+# Print highly correlated variable pairs
+print(highly_correlated)
 
-# Make predictions on the test set
-test_predictions <- predict(final_model, testing_data, type = "response")
 
-# Adjust predictions based on the cost-benefit analysis
-# Threshold optimization to maximize the score
-# Score = $1,300 * True Positives - $100 * False Positives
-optimize_threshold <- function(probabilities, true_labels) {
-  thresholds <- seq(0, 1, by = 0.01)
-  best_score <- -Inf
-  best_threshold <- 0.5
-  
-  for (threshold in thresholds) {
-    predicted_labels <- ifelse(probabilities >= threshold, 1, 0)
-    true_positives <- sum(predicted_labels == 1 & true_labels == 1)
-    false_positives <- sum(predicted_labels == 1 & true_labels == 0)
-    score <- 1300 * true_positives - 100 * false_positives
-    
-    if (score > best_score) {
-      best_score <- score
-      best_threshold <- threshold
-    }
-  }
-  
-  return(best_threshold)
-}
+# -------------------------------
+# Model Skewness - Weighting Method (Only on Training Data)
+# -------------------------------
+table(data$ckd) 
 
-# Use the validation set to find the optimal threshold
-optimal_threshold <- optimize_threshold(predict(final_model, validation_set, type = "response"), 
-                                        validation_set[[target]])
+# Compute class weights for imbalance handling
+class_weights <- table(data$ckd)
+class_weights <- max(class_weights) / class_weights
 
-# Apply the optimal threshold to the test set predictions
-test_predictions_binary <- ifelse(test_predictions >= optimal_threshold, 1, 0)
+# Apply weights to training data
+data$weights <- ifelse(data$ckd == "1", class_weights[1], class_weights[2])
 
-# Save the predictions to a CSV file
-predictions_df <- data.frame(ID = testing_data$ID, Prediction = test_predictions_binary)
-write.csv(predictions_df, "test_predictions.csv", row.names = FALSE)
+# -------------------------------
+# Feature Selection (Only on Training Set)
+# -------------------------------
+# Drop "total_chol" (Highly correlated with LDL)
+data <- data %>% select(-total_chol)
 
-# Print the optimal threshold and predictions
-cat("Optimal Threshold:", optimal_threshold, "\n")
-print(head(predictions_df))
+# Drop "waist" (Highly correlated with BMI & weight)
+data <- data %>% select(-waist)
+
+# Consolidate Family History Variables
+data <- data %>%
+  mutate(fam_cardiovascular = ifelse(fam_cvd > 0 | fam_hypertension > 0, 1, 0)) %>%
+  select(-fam_cvd, -fam_hypertension)
+
+# Drop "obese" (Redundant with BMI & weight)
+data <- data %>% select(-obese)
