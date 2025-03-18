@@ -63,14 +63,6 @@ get_binary_mode <- function(v) {
 }
 
 # -------------------------------
-# Detect Binary Columns
-# -------------------------------
-is_binary_column <- function(x) {
-  clean_x <- na.omit(x)
-  all(clean_x %in% c(0, 1)) && length(unique(clean_x)) <= 2
-}
-
-# -------------------------------
 # Function to fill NA with Majority Category (for categorical columns)
 # -------------------------------
 fill_na_with_majority <- function(df, cols) {
