@@ -14,7 +14,26 @@ library(fastDummies)
 # -------------------------------
 data <- read_excel("screening/screening_goodnames.xlsx")
 head(data)
+
+# ---------------------------------------------
+# Change to dummy variables & change to factor
+# ---------------------------------------------
+data <- dummy_cols(data, select_columns = "racegrp", remove_first_dummy = TRUE)
+data <- dummy_cols(data, select_columns = "care_source", remove_first_dummy = TRUE)
+data <- data %>% select(-racegrp)
+data <- data %>% select(-care_source)
+dim(data)
+View(data)
+
+binary_vars <- c("female", "educ", "unmarried", "dyslipidemia", "pvd", "poor_vision", 
+                 "smoker", "hypertension", "fam_hypertension", "diabetes", "fam_diabetes", 
+                 "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd")
+
+data[binary_vars] <- lapply(data[binary_vars], as.factor)
+
+# ---------------------------------------------------
 # Split the dataset into training and testing sets
+# ---------------------------------------------------
 # Training set: First 6,000 observations with CKD values
 # Testing set: Remaining 2,819 observations without CKD values
 print(colSums(is.na(data)))
@@ -37,16 +56,6 @@ dim(data)
 
 test <- testing_data
 dim(test)
-
-# -------------------------------
-# Change to dummy variables
-# -------------------------------
-data <- dummy_cols(data, select_columns = "racegrp", remove_first_dummy = TRUE)
-data <- dummy_cols(data, select_columns = "care_source", remove_first_dummy = TRUE)
-data <- data %>% select(-racegrp)
-data <- data %>% select(-care_source)
-dim(data)
-View(data)
 
 # -------------------------------
 # Handling missing values
@@ -187,3 +196,5 @@ data <- data %>%
 
 # Drop "obese" (Redundant with BMI & weight)
 data <- data %>% select(-obese)
+
+
