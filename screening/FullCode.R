@@ -15,22 +15,6 @@ library(fastDummies)
 data <- read_excel("screening/screening_goodnames.xlsx")
 head(data)
 
-# ---------------------------------------------
-# Change to dummy variables & change to factor
-# ---------------------------------------------
-data <- dummy_cols(data, select_columns = "racegrp", remove_first_dummy = TRUE)
-data <- dummy_cols(data, select_columns = "care_source", remove_first_dummy = TRUE)
-data <- dummy_cols(data, select_columns = "activity", remove_first_dummy = TRUE)
-data <- data %>% select(-racegrp)
-data <- data %>% select(-care_source)
-data <- data %>% select(-id)
-dim(data)
-
-binary_vars <- c("female", "educ", "unmarried", "income","insured", "obese", "dyslipidemia", "pvd", "poor_vision", 
-                 "smoker", "hypertension", "diabetes",  "fam_hypertension", "fam_diabetes", 
-                 "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd", "racegrp_hispa", "racegrp_other", "racegrp_white", "care_source_DrHMO", "care_source_noplace", "care_source_other", "care_source_NA")
-
-data[binary_vars] <- lapply(data[binary_vars], as.factor)
 
 # ---------------------------------------------------
 # Split the dataset into training and testing sets
@@ -145,6 +129,24 @@ removed <- result$removed_records
 # Print results
 cat("Removed records:", nrow(removed), "\n")
 cat("Missing values detected:", colSums(is.na(training_data)), "\n")
+
+# ---------------------------------------------
+# Change to dummy variables & change to factor
+# ---------------------------------------------
+training_data <- dummy_cols(training_data, select_columns = "racegrp", remove_first_dummy = TRUE)
+training_data <- dummy_cols(training_data, select_columns = "care_source", remove_first_dummy = TRUE)
+training_data <- dummy_cols(training_data, select_columns = "activity", remove_first_dummy = TRUE)
+training_data <- training_data %>% select(-racegrp)
+training_data <- training_data %>% select(-care_source)
+training_data <- training_data %>% select(-id)
+dim(training_data)
+
+binary_vars <- c("female", "educ", "unmarried", "income","insured", "obese", "dyslipidemia", "pvd", "poor_vision", 
+                 "smoker", "hypertension", "diabetes",  "fam_hypertension", "fam_diabetes", 
+                 "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd", "racegrp_hispa", "racegrp_other", "racegrp_white",
+                 "care_source_DrHMO", "care_source_noplace", "care_source_other", "activity_2","activity_3","activity_4")
+
+training_data[binary_vars] <- lapply(training_data[binary_vars], as.factor)
 
 
 # --------------------------------------
