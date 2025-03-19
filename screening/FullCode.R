@@ -300,11 +300,13 @@ print(class_plot)
 # ----------------------------------------
 # Prepare Training Set for Modeling use
 # ----------------------------------------
-write.csv(training_data, "screening/clean_train.csv", row.names = FALSE)
 
+# Validation Split from Train Data (80% Train, 20% Validation)
+set.seed(42)
+trainIndex <- createDataPartition(training_data$ckd, p = 0.8, list = FALSE)
+validation_data <- training_data[-trainIndex, ]
+training_data <- training_data[trainIndex, ]
 
-
-
-
-
+write.csv(training_data, "clean_train.csv", row.names = FALSE)
+write.csv(validation_data, "clean_val.csv", row.names = FALSE)
 
