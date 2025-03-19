@@ -15,7 +15,6 @@ library(fastDummies)
 data <- read_excel("screening/screening_goodnames.xlsx")
 head(data)
 
-
 # ---------------------------------------------------
 # Split the dataset into training and testing sets
 # ---------------------------------------------------
@@ -190,7 +189,7 @@ print("Normalized variables (0-1 range):")
 print(summary(training_data %>% select(all_of(continuous_vars))))
 
 # ----------------------------------------------------------
-# Compute Highly Correlated Variables (After Preprocessing)
+# Compute Highly Correlated Variables (Before Variable Selection)
 # ----------------------------------------------------------
 # Compute correlation matrix on numerical variables
 corr_matrix <- cor(training_data %>% select(where(is.numeric)), use = "complete.obs")
@@ -202,15 +201,73 @@ corr_long <- as.data.frame(as.table(corr_matrix)) %>%
   mutate(AbsCorrelation = abs(Correlation)) %>%  # Absolute values
   arrange(desc(AbsCorrelation))               # Sort by highest correlation
 
-# Filter and print highly correlated pairs (threshold = 0.8)
+# Filter and print highly correlated pairs (threshold = 0.7)
 highly_correlated <- corr_long %>% 
-  filter(AbsCorrelation >= 0.8)
+  filter(AbsCorrelation >= 0.7)
 
-print("Highly correlated variable pairs (|r| >= 0.8):")
+print("Highly correlated variable pairs (|r| >= 0.7):")
 print(highly_correlated)
 
 # Correlation heatmap
 corrplot(corr_matrix, method = "color", addCoef.col = "black", number.cex = 0.7)
+
+# ------------------------------------------------------------------
+# Variable Selection (Drop Columns solve multicollinearity)
+# ------------------------------------------------------------------
+# 1. Drop "Total Chol" because LDL is a better indicator in the context of CKD.
+#    (Total Chol is highly correlated with LDL at 0.93)
+training_data <- training_data %>% select(-`total_chol`)
+
+# 2. Drop "Waist" because it is highly correlated with both Weight and BMI (around 0.87),
+#    and you may prefer Weight and BMI to better capture the clinical aspect of body composition.
+training_data <- training_data %>% select(-waist)
+
+# 3. Drop "Weight"
+training_data <- training_data %>% select(-weight)
+
+# 4. Drop "Obese" because BMI (and Weight) provides a more informative, continuous measure.
+#    Obese is highly correlated with BMI and Weight.
+training_data <- training_data %>% select(-obese)
+
+# 5. Consolidate "Fam CVD" and "Fam Hypertension" into a single variable.
+#    These two variables are highly correlated (0.79) and represent overlapping family history.
+#    Here, we create a new binary variable 'FamCardio' which is 1 if either condition is present.
+training_data <- training_data %>%
+  mutate(
+    fam_cvd = as.integer(fam_cvd), 
+    fam_hypertension = as.integer(fam_hypertension),
+    fam_cardio = factor(if_else(fam_cvd == 1 | fam_hypertension == 1, 1, 0))
+  ) %>%
+  select(-fam_cvd, -fam_hypertension)
+
+
+# Check the remaining variable names
+print(names(training_data))
+
+# ----------------------------------------------------------
+# Compute Highly Correlated Variables (Before Variable Selection)
+# ----------------------------------------------------------
+# Compute correlation matrix on numerical variables
+corr_matrix <- cor(training_data %>% select(where(is.numeric)), use = "complete.obs")
+
+# Convert to long format and clean up
+corr_long <- as.data.frame(as.table(corr_matrix)) %>%
+  rename(Variable1 = Var1, Variable2 = Var2, Correlation = Freq) %>%
+  filter(Variable1 != Variable2) %>%          # Remove self-correlations
+  mutate(AbsCorrelation = abs(Correlation)) %>%  # Absolute values
+  arrange(desc(AbsCorrelation))               # Sort by highest correlation
+
+# Filter and print highly correlated pairs (threshold = 0.7)
+highly_correlated <- corr_long %>% 
+  filter(AbsCorrelation >= 0.7)
+
+print("Highly correlated variable pairs (|r| >= 0.7):")
+print(highly_correlated)
+
+# Correlation heatmap
+corrplot(corr_matrix, method = "color", addCoef.col = "black", number.cex = 0.7)
+
+View(training_data)
 
 # --------------------------------------
 # Check Class Balance (ckd) & Skewness
@@ -241,5 +298,13 @@ class_plot <- ggplot(training_data, aes(x = ckd, fill = ckd)) +
 print(class_plot)
 
 # ----------------------------------------
-# Drop variables & columns here
+# Prepare Training Set for Modeling use
 # ----------------------------------------
+write.csv(training_data, "screening/clean_train.csv", row.names = FALSE)
+
+
+
+
+
+
+
