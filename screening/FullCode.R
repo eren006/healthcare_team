@@ -307,6 +307,6 @@ trainIndex <- createDataPartition(training_data$ckd, p = 0.8, list = FALSE)
 validation_data <- training_data[-trainIndex, ]
 training_data <- training_data[trainIndex, ]
 
-write.csv(training_data, "clean_train.csv", row.names = FALSE)
-write.csv(validation_data, "clean_val.csv", row.names = FALSE)
+write.csv(training_data, "screening/clean_train.csv", row.names = FALSE)
+write.csv(validation_data, "screening/clean_val.csv", row.names = FALSE)
 
