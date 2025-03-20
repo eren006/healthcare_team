@@ -665,6 +665,39 @@ cat("Test predictions saved to CKD_test_predictions_logistic.csv\n")
 ## ------------------------ RANDOM FOREST MODEL ------------------------
 
 
+# Load necessary libraries
+library(randomForest)
+library(caret)
+
+# Step 1: Define the cleaning function (if not already defined)
+clean_factor_levels <- function(data) {
+  # Example: Clean factor levels by removing unused levels
+  data <- droplevels(data)
+  return(data)
+}
+
+# Step 2: Apply the cleaning function to training and validation datasets
+training_data <- clean_factor_levels(training_data)
+validation_data <- clean_factor_levels(validation_data)
+
+# Step 3: Ensure the target variable 'ckd' is a factor with valid levels
+training_data$ckd <- as.factor(training_data$ckd)
+validation_data$ckd <- as.factor(validation_data$ckd)
+
+# Step 4: Define the outcome variable and predictors
+outcome_var <- "ckd"
+predictors <- setdiff(names(training_data), outcome_var) # All columns except 'ckd'
+
+# Step 5: Train the Random Forest model
+set.seed(42) # For reproducibility
+rf_model <- randomForest(
+  x = training_data[, predictors], # Predictor variables
+  y = training_data[[outcome_var]], # Target variable
+  ntree = 100, # Number of trees
+  importance = TRUE # Calculate variable importance
+)
+
+importance(rf_model)
 
 
 
