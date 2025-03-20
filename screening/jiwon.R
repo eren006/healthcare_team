@@ -1,204 +1,157 @@
-install.packages("naniar")
+# -------------------------------
+# 1. Load Necessary Libraries
+# -------------------------------
+library(readxl)
+library(dplyr)
+library(caret)
+library(glmnet)
+library(pROC)
+library(corrplot)
+library(naniar)
+library(fastDummies)
 
+# ----------------------------------------
+# 2. Load the Dataset & Split into Training and Testing Sets
+# ----------------------------------------
 getwd()
 setwd("/Users/jiwonchoi/Desktop/github/healthcare_team/screening")
-
-# -------------------------------
-# 1. Load Libraries & Data
-# -------------------------------
-library(tidyverse)    # For data manipulation
-library(caret)        # For preprocessing and model partitioning
-library(corrplot)     # For plotting correlation heatmaps
-library(ggplot2)      # For general plotting
-library(readxl)
-library(naniar)
-library(reshape2)
-
-# Load your dataset (adjust the file path and filename as needed)
-data <- read_excel("screening_data.xls", sheet = "All Data")
-
-# Check the data
+data <- read_excel("screening_goodnames.xlsx")
 head(data)
 
-# -------------------------------
-# 2. Missing Value Treatment
-# -------------------------------
-# Check for missing values
-print(colSums(is.na(data)))
+# Training set: First 6,000 observations with CKD values
+# Testing set: Remaining 2,819 observations without CKD values
+training_data <- data %>% filter(!is.na(ckd))
+testing_data  <- data %>% filter(is.na(ckd))
 
-train_data <- data %>% filter(!is.na(CKD))
-test_data  <- data %>% filter(is.na(CKD))
+# Save the initial training and testing datasets
+write.csv(training_data, "train.csv", row.names = FALSE)
+write.csv(testing_data, "test.csv", row.names = FALSE)
 
-# Verify the dimensions (should be around 6000 for training and 2819 for test)
-dim(train_data)
-dim(test_data)
+# ----------------------------------------
+# 3. Handle Missing Values for Training Data Only
+# ----------------------------------------
 
+# Identify columns
+binary_cols <- c("female", "educ", "unmarried", "income", "insured", "obese", "dyslipidemia", 
+                 "pvd", "poor_vision", "smoker", "hypertension", "diabetes", "fam_hypertension", 
+                 "fam_diabetes", "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd")
+numerical_cols <- c("age", "weight", "height", "bmi", "waist", "sbp", "dbp", "hdl", "ldl")
+categorical_cols <- c("racegrp", "care_source", "activity")
 
-# -------------------------------
-# 3. EDA 
-# -------------------------------
-# Check missing data
-vis_miss(data)
-
-# Suppose corr_matrix is your correlation matrix
-# 1. Determine the reordering of variables via hierarchical clustering
-var_order <- corrMatOrder(corr_matrix, order = "hclust")
-
-# 2. Reorder your correlation matrix
-reordered_corr_matrix <- corr_matrix[var_order, var_order]
-
-# 3. Print the variable order to the console
-print(colnames(reordered_corr_matrix))
-
-# 4. Plot the reordered correlation matrix
-corrplot(reordered_corr_matrix,
-         method = "color",
-         addCoef.col = "black",
-         number.cex = 0.6,
-         tl.col = "black",
-         tl.srt = 45,
-         tl.cex = 0.7)
-
-# Exclude self-correlations by setting the diagonal to NA
-diag(corr_matrix) <- NA
-
-# Optionally, set the upper triangle to NA to avoid duplicate pairs
-corr_matrix[upper.tri(corr_matrix)] <- NA
-
-# Convert the matrix into a long-format data frame, excluding NAs
-corr_long <- melt(corr_matrix, na.rm = TRUE)
-
-# Sort the data frame by the absolute value of the correlation coefficient, in descending order
-corr_long_sorted <- corr_long[order(-abs(corr_long$value)), ]
-
-# Print the top 10 highest absolute correlations (excluding self-correlations)
-print(head(corr_long_sorted, 10))
-
-
-# Data 
-# 1. Drop "Total Chol" because LDL is a better indicator in the context of CKD.
-#    (Total Chol is highly correlated with LDL at 0.93)
-data <- data %>% select(-`Total Chol`)
-
-# 2. Drop "Waist" because it is highly correlated with both Weight and BMI (around 0.87),
-#    and you may prefer Weight and BMI to better capture the clinical aspect of body composition.
-data <- data %>% select(-Waist)
-
-# 3. Consolidate "Fam CVD" and "Fam Hypertension" into a single variable.
-#    These two variables are highly correlated (0.79) and represent overlapping family history.
-#    Here, we create a new binary variable 'FamCardio' which is 1 if either condition is present.
-data <- data %>%
-  mutate(FamCardio = ifelse(`Fam CVD` > 0 | `Fam Hypertension` > 0, 1, 0)) %>%
-  select(-`Fam CVD`, -`Fam Hypertension`)
-
-# 4. Drop "Obese" because BMI (and Weight) provides a more informative, continuous measure.
-#    Obese is highly correlated with BMI and Weight.
-data <- data %>% select(-Obese)
-
-# Check the remaining variable names
-print(names(data))
-
-
-
-
-
-# Impute missing numeric values using median imputation
-preProcValues <- preProcess(data, method = c("medianImpute"))
-data <- predict(preProcValues, data)
-
-# -------------------------------
-# 3. Outlier Detection & Treatment
-# -------------------------------
-# Define a function to replace outliers with NA (using 1.5*IQR rule)
-remove_outliers <- function(x) {
-  qnt <- quantile(x, probs = c(0.25, 0.75), na.rm = TRUE)
-  H <- 1.5 * IQR(x, na.rm = TRUE)
-  x[ x < (qnt[1] - H) | x > (qnt[2] + H) ] <- NA
-  return(x)
+# Fill binary columns with mode
+get_binary_mode <- function(v) {
+  uniqv <- unique(na.omit(v))
+  if (length(uniqv) == 0) return(NA)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+for (col in binary_cols) {
+  training_data[[col]][is.na(training_data[[col]])] <- get_binary_mode(training_data[[col]])
 }
 
-# Apply the function to all numeric variables
-data <- data %>%
-  mutate(across(where(is.numeric), remove_outliers))
+# Fill numerical columns with mean
+for (col in numerical_cols) {
+  training_data[[col]][is.na(training_data[[col]])] <- mean(training_data[[col]], na.rm = TRUE)
+}
 
-# Re-impute any new NAs from outlier removal (using the same preProcess object)
-data <- predict(preProcValues, data)
+# Fill categorical columns with majority value
+fill_na_with_majority <- function(df, cols) {
+  df <- df %>% mutate(across(all_of(cols), ~ ifelse(is.na(.), names(sort(table(.), decreasing = TRUE))[1], .)))
+  return(df)
+}
+training_data <- fill_na_with_majority(training_data, categorical_cols)
 
-# -------------------------------
-# 4. Normalization
-# -------------------------------
-# Normalize (scale) numeric variables so they have mean 0 and SD 1
-num_vars <- sapply(data, is.numeric)
-data[num_vars] <- scale(data[num_vars])
+# Remove unnecessary columns and convert to dummy variables
+training_data <- dummy_cols(training_data, select_columns = c("racegrp", "care_source", "activity"), 
+                            remove_first_dummy = TRUE) %>% 
+  select(-racegrp, -care_source, -activity, -id)
 
-# -------------------------------
-# 5. Correlation Heat Map
-# -------------------------------
-# Compute the correlation matrix for numeric variables
-corr_matrix <- cor(data[, num_vars], use = "pairwise.complete.obs")
-# Plot the heat map of correlations
-corrplot(corr_matrix, method = "color", addCoef.col = "black", number.cex = 0.7)
+# Save the cleaned training data before splitting
+write.csv(training_data, "clean_train.csv", row.names = FALSE)
 
-# -------------------------------
-# 6. Create BMI from Weight & Height
-# -------------------------------
-# Assuming 'Weight' is in kilograms and 'Height' is in centimeters:
-data$BMI <- data$Weight / ((data$Height/100)^2)
-# If your data uses different units (e.g., lbs and inches), adjust the formula accordingly.
+# ----------------------------------------
+# 4. Validation Split from Training Data (No Data Leakage)
+# ----------------------------------------
+set.seed(42)
+trainIndex <- createDataPartition(training_data$ckd, p = 0.8, list = FALSE)
+validation_data <- training_data[-trainIndex, ]
+training_data <- training_data[trainIndex, ]
 
-# -------------------------------
-# 7. Commonsense Variable Removal
-# -------------------------------
-# Remove variables that are not useful for prediction (e.g., IDs or variables with little variance)
-# Adjust the variable names based on your dataset.
-data <- data %>% select(-ID)  # Remove an ID column if present
+# Save the split training and validation datasets
+write.csv(training_data, "clean_train.csv", row.names = FALSE)
+write.csv(validation_data, "clean_val.csv", row.names = FALSE)
 
-# -------------------------------
-# 8. Weighted Modeling for Skewness
-# -------------------------------
-# The goal here is to focus on correctly identifying the positives (CKD cases) even if that means a 
-# higher cost for false negatives. For example, if your outcome variable is named 'CKD' (1 = at risk, 0 = not)
-# and you want to penalize missing a positive case more heavily, create a weight vector.
-# In this example, assign a weight of 1300 for positive cases and 100 for negatives.
-data$weight <- ifelse(data$CKD == 1, 1300, 100)
+# ----------------------------------------
+# 5. Imputation & Normalization - ONLY using Training Data
+# ----------------------------------------
 
-# -------------------------------
-# 9. Split Data (for training/validation)
-# -------------------------------
-# For demonstration, we split the data into training (80%) and testing (20%) sets.
-set.seed(123)
-trainIndex <- createDataPartition(data$CKD, p = 0.8, list = FALSE)
-trainData <- data[trainIndex, ]
-testData  <- data[-trainIndex, ]
+# Compute means, min, and max values from training data
+train_means <- sapply(training_data[numerical_cols], mean, na.rm = TRUE)
+train_min <- sapply(training_data[numerical_cols], min, na.rm = TRUE)
+train_max <- sapply(training_data[numerical_cols], max, na.rm = TRUE)
 
-# -------------------------------
-# 10. Model Building & Feature Selection
-# -------------------------------
-# Fit a weighted logistic regression model. (Other models such as classification trees could also be tried.)
-# Exclude the weight variable from the predictors.
-model <- glm(CKD ~ ., data = trainData %>% select(-weight), 
-             family = binomial, weights = trainData$weight)
-summary(model)
+# Normalization function
+normalize <- function(x, min_val, max_val) {
+  (x - min_val) / (max_val - min_val)
+}
 
-# Optional: Stepwise feature selection to refine the model
-model_step <- step(model, direction = "both")
-summary(model_step)
+# Apply preprocessing to training data
+for (col in numerical_cols) {
+  training_data[[col]] <- normalize(training_data[[col]], train_min[col], train_max[col])
+}
 
-# -------------------------------
-# 11. Prediction & Adjusting Classification Threshold
-# -------------------------------
-# Get predicted probabilities on the test set using the refined model.
-pred_probs <- predict(model_step, newdata = testData, type = "response")
+# Apply the same preprocessing to validation and testing data
+for (col in numerical_cols) {
+  validation_data[[col]] <- normalize(validation_data[[col]], train_min[col], train_max[col])
+  testing_data[[col]] <- normalize(testing_data[[col]], train_min[col], train_max[col])
+}
 
-# To focus on identifying positives, adjust the classification threshold below 0.5 (e.g., 0.3).
-threshold <- 0.3
-pred_class <- ifelse(pred_probs > threshold, 1, 0)
+# ----------------------------------------
+# 6. Train Logistic Regression Model
+# ----------------------------------------
+training_data$ckd <- as.factor(training_data$ckd)
+validation_data$ckd <- as.factor(validation_data$ckd)
 
-# View a confusion matrix to see performance (you may need the caret package's confusionMatrix function)
-conf_mat <- caret::confusionMatrix(factor(pred_class), factor(testData$CKD))
-print(conf_mat)
+logistic_model <- glm(ckd ~ ., data = training_data, family = binomial)
+summary(logistic_model)
 
-# -------------------------------
-# 12. (Optional) Feature Selection Finalization
-# -------------------------------
-# Additional feature selection methods (e.g., using recursive feature elimination) can be applied here if desired.
+# ----------------------------------------
+# 7. Model Evaluation on Validation Set
+# ----------------------------------------
+
+val_prob <- predict(logistic_model, newdata = validation_data, type = "response")
+profits <- data.frame()
+thresholds <- seq(0.01, 0.99, by = 0.01)
+
+for (threshold in thresholds) {
+  val_pred <- ifelse(val_prob > threshold, 1, 0)
+  TP <- sum(val_pred == 1 & validation_data$ckd == 1)
+  FP <- sum(val_pred == 1 & validation_data$ckd == 0)
+  profit <- TP * 1300 - FP * 100
+  profits <- rbind(profits, data.frame(Threshold = threshold, Profit = profit))
+}
+
+optimal_threshold <- profits$Threshold[which.max(profits$Profit)]
+cat("✅ Optimal Threshold for Maximum Profit: ", optimal_threshold, "\n")
+
+plot(profits$Threshold, profits$Profit, type = "l", col = "blue", 
+     xlab = "Threshold", ylab = "Profit", main = "Profit vs. Threshold")
+
+# ----------------------------------------
+# 8. Predict on Test Data
+# ----------------------------------------
+
+test_prob <- predict(logistic_model, newdata = testing_data, type = "response")
+test_pred <- ifelse(test_prob > optimal_threshold, 1, 0)
+
+output <- data.frame(ID = 1:length(test_pred), CKD_Prediction = test_pred)
+write.csv(output, "CKD_predictions.csv", row.names = FALSE)
+
+# ----------------------------------------
+# 9. ROC Curve & AUC Calculation (Optional)
+# ----------------------------------------
+
+roc_curve <- roc(validation_data$ckd, val_prob)
+auc_value <- auc(roc_curve)
+cat("📊 AUC for Validation Set: ", auc_value, "\n")
+
+plot(roc_curve, col = "red", main = paste("ROC Curve (AUC =", round(auc_value, 3), ")"))
