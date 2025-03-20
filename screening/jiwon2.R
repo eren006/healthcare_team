@@ -1,9 +1,8 @@
 # install.packages("naniar")
-install.packages("fastDummies") 
+# install.packages("fastDummies") 
 
 getwd()
 setwd("/Users/jiwonchoi/Desktop/github/healthcare_team/screening")
-
 # -------------------------------
 # 1. Load Libraries & Data
 # -------------------------------
@@ -27,166 +26,157 @@ data <- dummy_cols(data, select_columns = "care_source", remove_first_dummy = TR
 data <- data %>% select(-racegrp, -care_source)
 
 # -------------------------------
-# 3. Convert Binary Variables to Factors (Before Splitting)
+# 3. Convert Binary Variables to Factors
 # -------------------------------
 binary_vars <- c("female", "educ", "unmarried", "dyslipidemia", "pvd", "poor_vision", 
                  "smoker", "hypertension", "fam_hypertension", "diabetes", "fam_diabetes", 
                  "stroke", "cvd", "fam_cvd", "chf", "anemia", "ckd")
-
 data[binary_vars] <- lapply(data[binary_vars], as.factor)
 
 # -------------------------------
-# 4. Missing Value Treatment (Incorporating Friend’s Logic)
+# 4. Split Data into Train, Validation, and Test (to avoid data leakage)
 # -------------------------------
-# Check missing values
-print(colSums(is.na(data)))
+train_data <- data %>% filter(!is.na(ckd))  # Labeled data for training/validation
+test_data  <- data %>% filter(is.na(ckd))   # Unlabeled data for testing
 
-# Replace missing values in numeric columns with median
-data <- data %>% mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
-
-# -------------------------------
-# 5. Handle Outliers (Using IQR Method)
-# -------------------------------
-handle_outliers <- function(x) {
-  Q1 <- quantile(x, 0.25, na.rm = TRUE)
-  Q3 <- quantile(x, 0.75, na.rm = TRUE)
-  IQR <- Q3 - Q1
-  lower_bound <- Q1 - 1.5 * IQR
-  upper_bound <- Q3 + 1.5 * IQR
-  x[x < lower_bound] <- lower_bound
-  x[x > upper_bound] <- upper_bound
-  return(x)
-}
-
-data <- data %>% mutate(across(where(is.numeric), handle_outliers))
-
-# -------------------------------
-# 6. Split Data into Train, Validation, and Test (No Data Leakage)
-# -------------------------------
-train_data <- data %>% filter(!is.na(ckd))  # Train Data (Labeled)
-test_data  <- data %>% filter(is.na(ckd))   # Test Data (Unlabeled)
-
-# Validation Split from Train Data (80% Train, 20% Validation)
+# Create validation split from train_data (80% training, 20% validation)
 set.seed(42)  
 trainIndex <- createDataPartition(train_data$ckd, p = 0.8, list = FALSE)
 validation_data <- train_data[-trainIndex, ]
 train_data <- train_data[trainIndex, ]
 
-# Verify dataset dimensions
-dim(train_data)      
-dim(validation_data) 
-dim(test_data)       
+# -------------------------------
+# 5. Missing Value Treatment (using training set statistics)
+# -------------------------------
+numeric_vars <- names(train_data)[sapply(train_data, is.numeric)]
+train_medians <- sapply(train_data[numeric_vars], median, na.rm = TRUE)
+
+for (var in numeric_vars) {
+  train_data[[var]][is.na(train_data[[var]])] <- train_medians[var]
+  validation_data[[var]][is.na(validation_data[[var]])] <- train_medians[var]
+  test_data[[var]][is.na(test_data[[var]])] <- train_medians[var]
+}
 
 # -------------------------------
-# 7. Compute & Print Highly Correlated Variables (Train Data Only)
+# 6. Outlier Handling (using training set thresholds)
 # -------------------------------
-# Compute correlation matrix on numerical variables
+compute_thresholds <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  return(c(lower = lower_bound, upper = upper_bound))
+}
+
+thresholds <- lapply(train_data[numeric_vars], compute_thresholds)
+
+for (var in numeric_vars) {
+  lower <- thresholds[[var]]["lower"]
+  upper <- thresholds[[var]]["upper"]
+  
+  train_data[[var]] <- pmax(pmin(train_data[[var]], upper), lower)
+  validation_data[[var]] <- pmax(pmin(validation_data[[var]], upper), lower)
+  test_data[[var]] <- pmax(pmin(test_data[[var]], upper), lower)
+}
+
+# -------------------------------
+# 7. EDA: Missing Data Visualization & Correlation Heatmap
+# -------------------------------
+# Check missing data
+vis_miss(train_data)
+
+# Compute correlation matrix (Only on Training Data)
 corr_matrix <- cor(train_data %>% select(where(is.numeric)), use = "complete.obs")
 
-# Convert correlation matrix to long format
-corr_long <- as.data.frame(as.table(corr_matrix))
+# Reorder correlation matrix using hierarchical clustering
+var_order <- corrMatOrder(corr_matrix, order = "hclust")
+reordered_corr_matrix <- corr_matrix[var_order, var_order]
 
-# Rename columns
+# Plot the reordered correlation matrix
+corrplot(reordered_corr_matrix,
+         method = "color",
+         addCoef.col = "black",
+         number.cex = 0.6,
+         tl.col = "black",
+         tl.srt = 45,
+         tl.cex = 0.7)
+
+# -------------------------------
+# 8. Print Highly Correlated Variables (Train Data Only)
+# -------------------------------
+corr_long <- as.data.frame(as.table(corr_matrix))
 colnames(corr_long) <- c("Variable1", "Variable2", "Correlation")
 
-# Remove self-correlations
 corr_long <- corr_long %>% filter(Variable1 != Variable2)
-
-# Convert to absolute correlation values
 corr_long$AbsCorrelation <- abs(corr_long$Correlation)
-
-# Sort by highest absolute correlation
 corr_long <- corr_long %>% arrange(desc(AbsCorrelation))
 
-# Filter for highly correlated variables (Threshold: 0.8)
 highly_correlated <- corr_long %>% filter(AbsCorrelation >= 0.8)
-
-# Print highly correlated variable pairs
 print(highly_correlated)
 
 # -------------------------------
-# 8. Feature Selection (Only on Training Set)
+# 9. Feature Selection (Only on Training Set)
 # -------------------------------
-# Drop "total_chol" (Highly correlated with LDL)
-train_data <- train_data %>% select(-total_chol)
-validation_data <- validation_data %>% select(-total_chol)
-test_data  <- test_data %>% select(-total_chol)
+train_data <- train_data %>% select(-total_chol, -waist, -obese)
+validation_data <- validation_data %>% select(-total_chol, -waist, -obese)
+test_data  <- test_data %>% select(-total_chol, -waist, -obese)
 
-# Drop "waist" (Highly correlated with BMI & weight)
-train_data <- train_data %>% select(-waist)
-validation_data <- validation_data %>% select(-waist)
-test_data  <- test_data %>% select(-waist)
-
-# Consolidate Family History Variables
-train_data <- train_data %>%
+train_data <- train_data %>% 
   mutate(fam_cardiovascular = ifelse(fam_cvd > 0 | fam_hypertension > 0, 1, 0)) %>%
   select(-fam_cvd, -fam_hypertension)
 
-validation_data <- validation_data %>%
+validation_data <- validation_data %>% 
   mutate(fam_cardiovascular = ifelse(fam_cvd > 0 | fam_hypertension > 0, 1, 0)) %>%
   select(-fam_cvd, -fam_hypertension)
 
-test_data <- test_data %>%
+test_data <- test_data %>% 
   mutate(fam_cardiovascular = ifelse(fam_cvd > 0 | fam_hypertension > 0, 1, 0)) %>%
   select(-fam_cvd, -fam_hypertension)
 
-# Drop "obese" (Redundant with BMI & weight)
-train_data <- train_data %>% select(-obese)
-validation_data  <- validation_data %>% select(-obese)
-test_data  <- test_data %>% select(-obese)
+# -------------------------------
+# 10. Normalization (Min-Max Scaling Using Train Data)
+# -------------------------------
+min_vals <- sapply(train_data %>% select(where(is.numeric)), min, na.rm = TRUE)
+max_vals <- sapply(train_data %>% select(where(is.numeric)), max, na.rm = TRUE)
 
-# -------------------------------
-# 9. Normalization (Min-Max Scaling)
-# -------------------------------
-normalize <- function(x) {
-  return((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
+normalize <- function(x, min_val, max_val) {
+  (x - min_val) / (max_val - min_val)
 }
 
-train_data <- train_data %>% mutate(across(where(is.numeric), normalize))
-validation_data <- validation_data %>% mutate(across(where(is.numeric), normalize))
-test_data <- test_data %>% mutate(across(where(is.numeric), normalize))
+train_data <- train_data %>% mutate(across(where(is.numeric), ~ normalize(., min_vals[cur_column()], max_vals[cur_column()])))
+validation_data <- validation_data %>% mutate(across(where(is.numeric), ~ normalize(., min_vals[cur_column()], max_vals[cur_column()])))
+test_data <- test_data %>% mutate(across(where(is.numeric), ~ normalize(., min_vals[cur_column()], max_vals[cur_column()])))
 
 # -------------------------------
-# 10. Model Skewness - Weighting Method (Only on Training Data)
+# 11. Model Skewness - Weighting Method (Only on Training Data)
 # -------------------------------
-table(train_data$ckd) 
-
-# Compute class weights for imbalance handling
 class_weights <- table(train_data$ckd)
 class_weights <- max(class_weights) / class_weights
 
-# Apply weights to training data
 train_data$weights <- ifelse(train_data$ckd == "1", class_weights[1], class_weights[2])
 
 # -------------------------------
-# 11. Model Building & Feature Selection
+# 12. Model Building & Feature Selection
 # -------------------------------
-
-# Identify categorical variables with only one level
 single_level_vars <- names(train_data)[sapply(train_data, function(x) is.factor(x) && length(unique(x)) == 1)]
-
-# Print the problematic variables
-print(single_level_vars)
-
-# Remove single-level categorical variables
 train_data <- train_data %>% select(-all_of(single_level_vars))
 
-# Fit a weighted logistic regression model (Excluding weight variable)
-model <- glm(ckd ~ ., data = train_data %>% select(-weight), 
-             family = binomial, weights = train_data$weights)
+selected_features <- names(train_data %>% select(-ckd, -weights, -weight))
+
+model <- glm(as.formula(paste("ckd ~", paste(selected_features, collapse = " + "))), 
+             data = train_data, 
+             family = binomial, 
+             weights = train_data$weights)
 
 summary(model)
 
 # -------------------------------
-# 12. Prediction & Adjusting Classification Threshold
+# 13. Prediction & Adjusting Classification Threshold
 # -------------------------------
-# Get predicted probabilities on the test set
-pred_probs <- predict(model_step, newdata = test_data, type = "response")
-
-# Adjust threshold for positive classification
+pred_probs <- predict(model, newdata = test_data, type = "response")
 threshold <- 0.3  
 pred_class <- ifelse(pred_probs > threshold, 1, 0)
 
-# Evaluate model performance
 conf_mat <- caret::confusionMatrix(factor(pred_class), factor(test_data$ckd))
 print(conf_mat)
