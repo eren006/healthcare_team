@@ -689,7 +689,7 @@ if(nrow(x_test) > 0){
   cat("Length of test_probs:", length(test_probs), "\n")
   
   # Apply threshold
-  threshold <- 0.3
+  threshold <- 0.1
   test_pred <- ifelse(test_probs > threshold, 1, 0)
   cat("Length of test_pred:", length(test_pred), "\n")
   
@@ -736,7 +736,7 @@ test_probs <- as.vector(test_probs)
 cat("Length of test_probs: ", length(test_probs), "\n")
 
 # Apply the chosen threshold to obtain binary predictions
-threshold <- 0.3
+threshold <- 0.1
 test_pred <- ifelse(test_probs > threshold, 1, 0)
 cat("Length of test_pred: ", length(test_pred), "\n")
 
