@@ -42,9 +42,9 @@ testing_data <- testing_data %>% clean_names()
 
 # Save the datasets as CSV files
 getwd()
-write.csv(training_data, "screening/train.csv", row.names = FALSE)
-write.csv(testing_data, "screening/test.csv", row.names = FALSE)
-write.csv(validation_data, "screening/validation.csv", row.names = FALSE)
+write.csv(training_data, "train.csv", row.names = FALSE)
+write.csv(testing_data, "test.csv", row.names = FALSE)
+write.csv(validation_data, "validation.csv", row.names = FALSE)
 
 
 # -----------------------------------------------
