@@ -682,34 +682,8 @@ if(length(extra_cols) > 0){
 x_test <- x_test[, train_cols, drop = FALSE]
 cat("Dimensions of aligned x_test:", dim(x_test), "\n")
 
-# --- Predict using the final logistic regression model ---
-if(nrow(x_test) > 0){
-  test_probs <- predict(final_model, newx = x_test, type = "response")
-  test_probs <- as.vector(test_probs)
-  cat("Length of test_probs:", length(test_probs), "\n")
-  
-  # Apply threshold
-  threshold <- 0.1
-  test_pred <- ifelse(test_probs > threshold, 1, 0)
-  cat("Length of test_pred:", length(test_pred), "\n")
-  
-  # Combine with test IDs
-  submission <- data.frame(ID = test_clean$id, CKD_Prediction = test_pred)
-  write.csv(submission, "CKD_test_predictions_logistic.csv", row.names = FALSE)
-  cat("Test predictions saved to CKD_test_predictions_logistic.csv\n")
-} else {
-  cat("Error: x_test has 0 rows. Please check the cleaned test data.\n")
-}
-
 # Since the cleaning process dropped the 'id' column, reattach it using the original order
 test_clean$id <- test_original$id
-
-# Build the test model matrix using the same formula as training (without intercept)
-x_test <- model.matrix(~ . - 1, data = test_clean)
-
-# Check dimensions of training matrix
-train_cols <- colnames(x_train)
-cat("Number of predictors in training model matrix: ", length(train_cols), "\n")
 
 # Align test matrix with training columns
 missing_cols <- setdiff(train_cols, colnames(x_test))
@@ -746,7 +720,6 @@ submission <- data.frame(ID = test_clean$id, CKD_Prediction = test_pred)
 # Save the prediction result to a CSV file.
 write.csv(submission, "CKD_test_predictions_logistic.csv", row.names = FALSE)
 cat("Test predictions saved to CKD_test_predictions_logistic.csv\n")
-
 
 
 ## ------------------------ RANDOM FOREST MODEL ------------------------
