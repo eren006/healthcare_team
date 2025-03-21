@@ -42,9 +42,9 @@ testing_data <- testing_data %>% clean_names()
 
 # Save the datasets as CSV files
 getwd()
-write.csv(training_data, "train.csv", row.names = FALSE)
-write.csv(testing_data, "test.csv", row.names = FALSE)
-write.csv(validation_data, "validation.csv", row.names = FALSE)
+write.csv(training_data, "screening/train.csv", row.names = FALSE)
+write.csv(testing_data, "screening/test.csv", row.names = FALSE)
+write.csv(validation_data, "screening/validation.csv", row.names = FALSE)
 
 
 # -----------------------------------------------
@@ -463,13 +463,14 @@ cat("\nPre-processing complete. Cleaned train, validation, and test datasets are
 
 ## ------------- LOGISTIC REGRESSION MODEL ------------------------
 
+getwd()
 # Load the cleaned training and validation datasets
-train_data <- read.csv("clean_train.csv", stringsAsFactors = TRUE)
-val_data   <- read.csv("clean_val.csv", stringsAsFactors = TRUE)
+train_data <- read.csv("screening/clean_train.csv", stringsAsFactors = TRUE)
+val_data   <- read.csv("screening/clean_val.csv", stringsAsFactors = TRUE)
 
 # Load the original test set (with IDs) and the cleaned test set
-test_original <- read.csv("test.csv", stringsAsFactors = TRUE)
-test_clean <- read.csv("clean_test.csv", stringsAsFactors = TRUE)
+test_original <- read.csv("screening/test.csv", stringsAsFactors = TRUE)
+test_clean <- read.csv("screening/clean_test.csv", stringsAsFactors = TRUE)
 
 # Check class distribution in training data
 cat("Training set CKD distribution:\n")
