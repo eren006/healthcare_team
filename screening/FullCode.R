@@ -467,6 +467,10 @@ cat("\nPre-processing complete. Cleaned train, validation, and test datasets are
 train_data <- read.csv("clean_train.csv", stringsAsFactors = TRUE)
 val_data   <- read.csv("clean_val.csv", stringsAsFactors = TRUE)
 
+# Load the original test set (with IDs) and the cleaned test set
+test_original <- read.csv("test.csv", stringsAsFactors = TRUE)
+test_clean <- read.csv("clean_test.csv", stringsAsFactors = TRUE)
+
 # Check class distribution in training data
 cat("Training set CKD distribution:\n")
 print(prop.table(table(train_data$ckd)))
@@ -612,10 +616,6 @@ if(nrow(x_test) > 0){
 } else {
   cat("Error: x_test has 0 rows. Please check the cleaned test data.\n")
 }
-
-# Load the original test set (with IDs) and the cleaned test set
-test_original <- read.csv("test.csv", stringsAsFactors = TRUE)
-test_clean <- read.csv("clean_test.csv", stringsAsFactors = TRUE)
 
 # Since the cleaning process dropped the 'id' column, reattach it using the original order
 test_clean$id <- test_original$id
