@@ -768,26 +768,28 @@ training_data <- clean_factor_levels(training_data)
 validation_data <- clean_factor_levels(validation_data)
 
 # Step 3: Ensure the target variable 'ckd' is a factor with valid levels
-training_data$ckd <- as.factor(training_data$ckd)
-validation_data$ckd <- as.factor(validation_data$ckd)
+training_data$ckd <- factor(training_data$ckd, levels = c("1", "0"))
+validation_data$ckd <- factor(validation_data$ckd, levels = c("1", "0"))
 
 # Step 4: Define the outcome variable and predictors
 outcome_var <- "ckd"
 predictors <- setdiff(names(training_data), outcome_var) # All columns except 'ckd'
 
 # Step 1: Calculate class weights
-class_weights <- table(training_data$ckd)
-class_weights <- 1 / class_weights # Inverse of class frequencies
-class_weights <- class_weights / sum(class_weights) # Normalize weights
+#class_weights <- table(training_data$ckd)
+#class_weights <- 1 / class_weights # Inverse of class frequencies
+#class_weights <- class_weights / sum(class_weights) # Normalize weights
 
 # Step 2: Train the Random Forest model with class weights
 rf_model <- randomForest(
-  ckd ~ ., 
-  data = training_data, 
+  x = training_data[, predictors],  # Select predictors
+  y = training_data$ckd,  # Target variable
   ntree = 100, 
-  importance = TRUE,
-  classwt = class_weights
+  importance = TRUE
 )
+
+
+#classwt = class_weights
 
 # Step 3: Evaluate the model on the validation dataset
 validation_predictions <- predict(rf_model, validation_data)
