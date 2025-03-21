@@ -130,6 +130,9 @@ predictors <- setdiff(names(training_data), outcome_var)
 set.seed(42)  # Set seed for reproducibility
 cv_folds <- trainControl(method = "cv", number = 10, classProbs = TRUE)  # 10-fold CV
 
+names(training_data) <- make.names(names(training_data))
+names(validation_data) <- make.names(names(validation_data))
+
 # Train the Random Forest model with 10-fold CV
 rf_model <- train(
   as.formula(paste(outcome_var, "~", paste(predictors, collapse = "+"))),
@@ -156,15 +159,107 @@ print(importance(rf_model$finalModel))
 varImpPlot(rf_model$finalModel)
 
 
+# Load necessary libraries
+library(tidyverse)
+library(randomForest)
+library(caret)
 
+# Load necessary libraries
+library(randomForest)
+library(caret)
 
+# Step 1: Define the cleaning function (if not already defined)
+clean_factor_levels <- function(data) {
+  # Example: Clean factor levels by removing unused levels
+  data <- droplevels(data)
+  return(data)
+}
 
+# Step 2: Apply the cleaning function to training and validation datasets
+training_data <- clean_factor_levels(training_data)
+validation_data <- clean_factor_levels(validation_data)
 
+# Step 3: Ensure the target variable 'ckd' is a factor with valid levels
+training_data$ckd <- as.factor(training_data$ckd)
+validation_data$ckd <- as.factor(validation_data$ckd)
 
+# Step 4: Define the outcome variable and predictors
+outcome_var <- "ckd"
+predictors <- setdiff(names(training_data), outcome_var) # All columns except 'ckd'
 
+# Step 5: Train the Random Forest model
+set.seed(42) # For reproducibility
+rf_model <- randomForest(
+  x = training_data[, predictors], # Predictor variables
+  y = training_data[[outcome_var]], # Target variable
+  ntree = 100, # Number of trees
+  importance = TRUE # Calculate variable importance
+)
 
+importance(rf_model)
 
+# Load libraries
+library(xgboost)
+library(caret)
+library(DMwR)  # For SMOTE
 
+# Step 1: Clean factor levels
+clean_factor_levels <- function(data) {
+  data <- droplevels(data)  # Remove unused factor levels
+  return(data)
+}
 
+# Step 2: Apply cleaning to training/validation data
+training_data <- clean_factor_levels(training_data)
+validation_data <- clean_factor_levels(validation_data)
 
+# Step 3: Ensure 'ckd' is a factor
+training_data$ckd <- as.factor(training_data$ckd)
+validation_data$ckd <- as.factor(validation_data$ckd)
 
+# Step 4: Define outcome and predictors
+outcome_var <- "ckd"
+predictors <- setdiff(names(training_data), outcome_var)
+
+# Step 5: Handle class imbalance with SMOTE
+set.seed(123)
+training_balanced <- SMOTE(ckd ~ ., data = training_data, perc.over = 100, perc.under = 200)
+
+# Step 6: Prepare data for XGBoost
+# Convert to numeric matrix (XGBoost requires numeric input)
+train_features <- as.matrix(training_balanced[, predictors])
+train_labels <- as.numeric(as.character(training_balanced$ckd))  # Convert to 0/1
+
+# Step 7: Train XGBoost model
+dtrain <- xgb.DMatrix(data = train_features, label = train_labels)
+
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "aucpr",          # Optimize for precision-recall (imbalance-aware)
+  max_depth = 6,                  # Control model complexity
+  eta = 0.1,                      # Learning rate
+  scale_pos_weight = 10           # Penalize misclassifying CKD (adjust based on imbalance ratio)
+)
+
+xgb_model <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = 100,
+  early_stopping_rounds = 10,
+  verbose = 1
+)
+
+# Step 8: Evaluate on validation data
+validation_features <- as.matrix(validation_data[, predictors])
+validation_labels <- as.numeric(as.character(validation_data$ckd))
+
+pred_probs <- predict(xgb_model, validation_features)
+pred_class <- ifelse(pred_probs > 0.5, 1, 0)  # Adjust threshold as needed
+
+# Confusion matrix and metrics
+conf_matrix <- confusionMatrix(as.factor(pred_class), as.factor(validation_labels))
+print(conf_matrix)
+
+# Feature importance
+importance <- xgb.importance(feature_names = predictors, model = xgb_model)
+xgb.plot.importance(importance, top_n = 10)
