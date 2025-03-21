@@ -206,6 +206,7 @@ training_data <- dummy_cols(training_data, select_columns = "activity", remove_f
 training_data <- training_data %>% select(-racegrp)
 training_data <- training_data %>% select(-care_source)
 training_data <- training_data %>% select(-id)
+training_data <- training_data %>% select(-activity)
 dim(training_data)
 training_data[binary_vars] <- lapply(training_data[binary_vars], as.factor)
 
@@ -215,6 +216,7 @@ validation_data <- dummy_cols(validation_data, select_columns = "activity", remo
 validation_data <- validation_data %>% select(-racegrp)
 validation_data <- validation_data %>% select(-care_source)
 validation_data <- validation_data %>% select(-id)
+validation_data <- validation_data %>% select(-activity)
 dim(validation_data)
 validation_data[binary_vars] <- lapply(validation_data[binary_vars], as.factor)
 
@@ -224,6 +226,7 @@ testing_data <- dummy_cols(testing_data, select_columns = "activity", remove_fir
 testing_data <- testing_data %>% select(-racegrp)
 testing_data <- testing_data %>% select(-care_source)
 testing_data <- testing_data %>% select(-id)
+testing_data <- testing_data %>% select(-activity)
 dim(testing_data)
 testing_data[binary_vars] <- lapply(testing_data[binary_vars], as.factor)
 
