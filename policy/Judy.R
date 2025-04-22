@@ -91,6 +91,7 @@ ggplot(avg_def, aes(x = year, y = mean_def, color = group)) +
 # Question h
 # Difference-in-Differences with two-way fixed effects
 # Outcome: Permanent RN Staffing (rn_permanent_hprd)
+
 # Ensure the dataset is filtered for non-missing staffing outcome
 df_h <- df %>%
   filter(!is.na(rn_permanent_hprd))
@@ -105,7 +106,7 @@ staffing_model <- feols(
 # Output regression summary
 summary(staffing_model)
 
-# Optional: Visualize average RN staffing trends over time by treatment group
+# Visualize average RN staffing trends over time by treatment group
 avg_staffing <- df %>%
   group_by(group, year) %>%
   summarise(mean_staff = mean(rn_permanent_hprd, na.rm = TRUE), .groups = "drop")
