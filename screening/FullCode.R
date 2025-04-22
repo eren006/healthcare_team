@@ -682,34 +682,8 @@ if(length(extra_cols) > 0){
 x_test <- x_test[, train_cols, drop = FALSE]
 cat("Dimensions of aligned x_test:", dim(x_test), "\n")
 
-# --- Predict using the final logistic regression model ---
-if(nrow(x_test) > 0){
-  test_probs <- predict(final_model, newx = x_test, type = "response")
-  test_probs <- as.vector(test_probs)
-  cat("Length of test_probs:", length(test_probs), "\n")
-  
-  # Apply threshold
-  threshold <- 0.3
-  test_pred <- ifelse(test_probs > threshold, 1, 0)
-  cat("Length of test_pred:", length(test_pred), "\n")
-  
-  # Combine with test IDs
-  submission <- data.frame(ID = test_clean$id, CKD_Prediction = test_pred)
-  write.csv(submission, "CKD_test_predictions_logistic.csv", row.names = FALSE)
-  cat("Test predictions saved to CKD_test_predictions_logistic.csv\n")
-} else {
-  cat("Error: x_test has 0 rows. Please check the cleaned test data.\n")
-}
-
 # Since the cleaning process dropped the 'id' column, reattach it using the original order
 test_clean$id <- test_original$id
-
-# Build the test model matrix using the same formula as training (without intercept)
-x_test <- model.matrix(~ . - 1, data = test_clean)
-
-# Check dimensions of training matrix
-train_cols <- colnames(x_train)
-cat("Number of predictors in training model matrix: ", length(train_cols), "\n")
 
 # Align test matrix with training columns
 missing_cols <- setdiff(train_cols, colnames(x_test))
@@ -736,7 +710,7 @@ test_probs <- as.vector(test_probs)
 cat("Length of test_probs: ", length(test_probs), "\n")
 
 # Apply the chosen threshold to obtain binary predictions
-threshold <- 0.3
+threshold <- 0.1
 test_pred <- ifelse(test_probs > threshold, 1, 0)
 cat("Length of test_pred: ", length(test_pred), "\n")
 
@@ -746,7 +720,6 @@ submission <- data.frame(ID = test_clean$id, CKD_Prediction = test_pred)
 # Save the prediction result to a CSV file.
 write.csv(submission, "CKD_test_predictions_logistic.csv", row.names = FALSE)
 cat("Test predictions saved to CKD_test_predictions_logistic.csv\n")
-
 
 
 ## ------------------------ RANDOM FOREST MODEL ------------------------
@@ -768,26 +741,28 @@ training_data <- clean_factor_levels(training_data)
 validation_data <- clean_factor_levels(validation_data)
 
 # Step 3: Ensure the target variable 'ckd' is a factor with valid levels
-training_data$ckd <- as.factor(training_data$ckd)
-validation_data$ckd <- as.factor(validation_data$ckd)
+training_data$ckd <- factor(training_data$ckd, levels = c("1", "0"))
+validation_data$ckd <- factor(validation_data$ckd, levels = c("1", "0"))
 
 # Step 4: Define the outcome variable and predictors
 outcome_var <- "ckd"
 predictors <- setdiff(names(training_data), outcome_var) # All columns except 'ckd'
 
 # Step 1: Calculate class weights
-class_weights <- table(training_data$ckd)
-class_weights <- 1 / class_weights # Inverse of class frequencies
-class_weights <- class_weights / sum(class_weights) # Normalize weights
+#class_weights <- table(training_data$ckd)
+#class_weights <- 1 / class_weights # Inverse of class frequencies
+#class_weights <- class_weights / sum(class_weights) # Normalize weights
 
 # Step 2: Train the Random Forest model with class weights
 rf_model <- randomForest(
-  ckd ~ ., 
-  data = training_data, 
+  x = training_data[, predictors],  # Select predictors
+  y = training_data$ckd,  # Target variable
   ntree = 100, 
-  importance = TRUE,
-  classwt = class_weights
+  importance = TRUE
 )
+
+
+#classwt = class_weights
 
 # Step 3: Evaluate the model on the validation dataset
 validation_predictions <- predict(rf_model, validation_data)
