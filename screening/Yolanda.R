@@ -74,6 +74,20 @@ val_score <- (1300 * correct_CKD_val) - (100 * false_positives_val)
 print(conf_matrix)
 print(paste("Validation Score:", val_score))
 
+# Predict probabilities using the trained LPM model
+clean_val$pred_prob <- predict(lpm_model, clean_val)
+
+# Ensure probabilities are within [0,1] range
+clean_val$pred_prob <- pmax(pmin(clean_val$pred_prob, 1), 0)
+
+# Classify CKD using the default threshold (0.5)
+clean_val$default_pred <- ifelse(clean_val$pred_prob > 0.5, 1, 0)
+
+# Compute confusion matrix BEFORE threshold adjustment
+conf_matrix_default <- confusionMatrix(factor(clean_val$default_pred), factor(clean_val$ckd), positive = "1")
+
+# Print confusion matrix
+print(conf_matrix_default)
 
 
 
