@@ -29,12 +29,16 @@ View(df)
 df_h <- df %>%
   filter(!is.na(rn_permanent_hprd))
 
+# Ensure ownership is a factor
+df_h <- df_h %>%
+  mutate(ownership = factor(ownership))
+
 View(df_h)
 
 # Run DiD model with two-way fixed effects
 staffing_model <- feols(
   rn_permanent_hprd ~ treated_post + beds + chain + hospital_aff + ownership |
-    state + year,
+    provnum + year,
   data = df_h,
   cluster = ~provnum
 )
