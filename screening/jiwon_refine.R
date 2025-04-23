@@ -1,3 +1,5 @@
+getwd()
+setwd("/Users/jiwonchoi/Desktop/github/healthcare_team/screening")
 # -------------------------------
 # 0. Load Necessary Libraries
 # -------------------------------
