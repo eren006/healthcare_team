@@ -14,12 +14,12 @@ colSums(is.na(df))
 df <- df %>% filter(!is.na(beds), !is.na(ownership))
 
 # treated states
-treated_states <- c("AK", "NH", "NY", "PA", "MO")  
+treated_states <- c("AK", "NH", "NY", "PA")  
 df <- df %>%
   mutate(treated = ifelse(state %in% treated_states, 1, 0))
 
 # post 
-law_year <- c(AK = 2010, MO = 2006, NH = 2008, NY = 2009, PA = 2009)
+law_year <- c(AK = 2010, NH = 2008, NY = 2009, PA = 2009)
 
 df <- df %>%
   mutate(
@@ -28,7 +28,6 @@ df <- df %>%
       state == "NH" & year >= 2008 ~ 1,
       state == "NY" & year >= 2008 ~ 1,
       state == "PA" & year >= 2009 ~ 1,
-      state == "MO" & year >= 2006 ~ 1,  
       TRUE ~ 0
     ),
     treated_post = treated * post
@@ -60,7 +59,7 @@ library(dplyr)
 library(ggplot2)
 
 #treated and controlled states
-treated_states <- c("AK", "NH", "NY", "PA", "MO")
+treated_states <- c("AK", "NH", "NY", "PA")
 
 df <- df %>%
   mutate(group = ifelse(state %in% treated_states, "Treated", "Control"))
